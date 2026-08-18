@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiniMax H3 Long Workflow Generator</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #6c8cff;
+    --accent-hover: #8aa4ff;
+    --success: #3ecf8e;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.55rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 26px; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .panel h2 { font-size: 1.05rem; margin-bottom: 14px; color: var(--accent); }
+  label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea {
+    width: 100%;
+    background: #12151b;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 9px 12px;
+    font-size: 0.93rem;
+    margin-bottom: 12px;
+  }
+  textarea { min-height: 100px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86rem; }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.93rem;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  button:hover { background: var(--accent-hover); }
+  button.secondary { background: #2a3140; }
+  button.secondary:hover { background: #353e52; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .status {
+    margin-top: 14px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    display: none;
+  }
+  .status.info { background: #1c2433; color: #a8c0ff; display: block; }
+  .status.success { background: #14332a; color: var(--success); display: block; }
+  .status.error { background: #331c1c; color: var(--danger); display: block; }
+  .full { grid-column: 1 / -1; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: -6px; margin-bottom: 10px; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 0.88rem; }
+  .mode-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: #243044;
+    color: #9ab0ff;
+    margin-left: 8px;
+  }
+  .clip-calc {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 0.82rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .tips-list {
+    font-size: 0.85rem;
+    color: var(--muted);
+    padding-left: 18px;
+  }
+  .tips-list li { margin-bottom: 7px; }
+  .tips-list strong { color: var(--text); }
+  .speed-note {
+    background: #1c2433;
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.85rem;
+    margin-top: 12px;
+    color: #b8c7e6;
+  }
+</style>
+</head>
+<body>
+
+<h1>MiniMax H3 Long Workflow Generator <span class="mode-badge" id="modeBadge">T2V</span></h1>
+<p class="subtitle">Browser-based • API optional • Multi-provider • Pure Text-to-Video or Image-to-Video • Seamless clip chaining</p>
+
+<div class="grid">
+
+  <!-- Prompt -->
+  <div class="panel">
+    <h2>1. Prompt & Duration</h2>
+    <label>Raw prompt / idea</label>
+    <textarea id="userPrompt" placeholder="A skilled middle-aged chef preparing classic French onion soup from start to finish in a professional kitchen..."></textarea>
+
+    <div class="row">
+      <div>
+        <label>Total duration (seconds)</label>
+        <input type="number" id="duration" value="60" min="4" max="600" step="1">
+      </div>
+      <div>
+        <label>Target segment / clip length (s)</label>
+        <input type="number" id="segLen" value="4" min="3" max="15" step="0.5">
+      </div>
+    </div>
+    <p class="hint">
+      Live calc: <span class="clip-calc" id="clipCalc">≈ 15 clips</span>
+      &nbsp;·&nbsp; Example: 60 s + 4 s → 15 clips. 60 s + 10 s → 6 clips.
+    </p>
+  </div>
+
+  <!-- Provider -->
+  <div class="panel">
+    <h2>2. LLM Provider (optional)</h2>
+    <label>Provider</label>
+    <select id="provider">
+      <option value="none">None / Local generator (no API)</option>
+      <option value="xai">Grok (xAI)</option>
+      <option value="openai">OpenAI</option>
+      <option value="anthropic">Anthropic</option>
+      <option value="ollama">Ollama (local)</option>
+    </select>
+
+    <div id="apiKeyGroup">
+      <label>API Key (stored only in this browser)</label>
+      <input type="password" id="apiKey" placeholder="sk-... or xai-...">
+      <p class="hint">Keys stay in localStorage. Browser CORS may block some cloud providers — Ollama works best for local use.</p>
+    </div>
+
+    <div id="ollamaGroup" style="display:none">
+      <label>Ollama base URL</label>
+      <input type="text" id="ollamaUrl" value="http://localhost:11434">
+      <label>Ollama model</label>
+      <input type="text" id="ollamaModel" value="qwen2.5:32b">
+    </div>
+
+    <label>Model name (cloud providers)</label>
+    <input type="text" id="modelName" value="grok-4" placeholder="grok-4 / gpt-4o / claude-3-5-sonnet-...">
+  </div>
+
+  <!-- Mode + Settings -->
+  <div class="panel full">
+    <h2>3. Mode & Workflow Settings</h2>
+
+    <label>Generation mode</label>
+    <select id="genMode">
+      <option value="t2v" selected>Text-to-Video (no start image needed)</option>
+      <option value="i2v">Image-to-Video (requires start image)</option>
+    </select>
+
+    <div id="startImageGroup" style="display:none">
+      <label>Start image filename (must exist in ComfyUI input folder)</label>
+      <input type="text" id="startImage" value="start_frame.png">
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Width</label>
+        <input type="number" id="width" value="768">
+      </div>
+      <div>
+        <label>Height</label>
+        <input type="number" id="height" value="1344">
+      </div>
+      <div>
+        <label>Steps</label>
+        <input type="number" id="steps" value="8" min="4" max="30">
+      </div>
+    </div>
+    <p class="hint">Tip: With a Turbo LoRA use 6–8 steps for 3–5× speed. Base model without LoRA usually needs 16–20.</p>
+
+    <details>
+      <summary>Advanced model names</summary>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>UNET</label>
+          <input type="text" id="unetName" value="minimax_h3_fl2va_pruned_int8_convrot.safetensors">
+        </div>
+        <div>
+          <label>CLIP</label>
+          <input type="text" id="clipName" value="qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Video VAE</label>
+          <input type="text" id="videoVae" value="minimax_h3_video_vae_fp16.safetensors">
+        </div>
+        <div>
+          <label>Audio VAE</label>
+          <input type="text" id="audioVae" value="minimax_h3_audio_vae_fp32.safetensors">
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <!-- Segments -->
+  <div class="panel full">
+    <h2>4. Segments (editable)</h2>
+    <p class="hint">Paste planner JSON, edit by hand, generate locally, or let an LLM create it. Continuity language is injected automatically on non-first segments so last-frame (or latent) joins stay as seamless as possible. First segment is pure T2V when that mode is selected.</p>
+    <textarea id="segmentsJson" style="min-height:210px" placeholder='{"enhanced_overall":"...","total_seconds":60,"segments":[{"index":1,"approx_seconds":4,"prompt":"..."}]}'></textarea>
+  </div>
+
+  <!-- Actions -->
+  <div class="panel full">
+    <div class="actions">
+      <button id="btnPlan">Generate Segments (local)</button>
+      <button id="btnGenerate" class="secondary">Generate Workflow JSON</button>
+      <button id="btnDownloadSeg" class="secondary">Download segments.json</button>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <!-- Speed & Seamless tips -->
+  <div class="panel full">
+    <h2>Speed & Seamless Joining</h2>
+    <ul class="tips-list">
+      <li><strong>Current chaining</strong> uses last-frame → first-frame + strong continuity language in every prompt. This is solid and already implemented in the generated workflow (duplicate first frames are trimmed, video + audio are concatenated).</li>
+      <li><strong>For truly seamless motion & audio</strong> across many short clips, install <code>ComfyUI-H3-Project-Suite</code> or <code>ComfyUI_MiniMax_H3_Extender</code> and later swap the hand-off to latent / motion-context mode. The generator structure supports that upgrade.</li>
+      <li><strong>Speed stack (recommended)</strong>: keep SageAttention + EasyCache (already in the workflow) → add a Turbo LoRA (v4 / EMA preferred) → set Steps to 6–8. Community reports 3–5× wall-clock reduction with usable quality.</li>
+      <li><strong>4-second clips</strong> give tight narrative control (15 joins on a 60 s video) but increase the number of potential soft resets. 6–10 s is often a better continuity/speed compromise unless you specifically need rapid cuts.</li>
+      <li><strong>Start image</strong> (I2V mode) must closely match the first segment’s character, clothing, environment and framing for best results.</li>
+    </ul>
+    <div class="speed-note">
+      After downloading the workflow JSON, load it into ComfyUI. For maximum speed load a Turbo LoRA at strength ~1.0 and keep Steps at 6–8. Peak VRAM stays roughly equal to a single clip because generation is sequential.
+    </div>
+  </div>
+</div>
+
+<script>
+// ------------------------------------------------------------------
+// Helpers & persistence
+// ------------------------------------------------------------------
+const $ = id => document.getElementById(id);
+
+function loadSettings() {
+  const s = JSON.parse(localStorage.getItem("h3long_settings_v2") || "{}");
+  if (s.provider) $("provider").value = s.provider;
+  if (s.apiKey) $("apiKey").value = s.apiKey;
+  if (s.modelName) $("modelName").value = s.modelName;
+  if (s.ollamaUrl) $("ollamaUrl").value = s.ollamaUrl;
+  if (s.ollamaModel) $("ollamaModel").value = s.ollamaModel;
+  if (s.genMode) $("genMode").value = s.genMode;
+  if (s.steps) $("steps").value = s.steps;
+  if (s.segLen) $("segLen").value = s.segLen;
+  toggleProviderUI();
+  toggleModeUI();
+  updateClipCalc();
+  updatePlanButton();
+}
+function saveSettings() {
+  localStorage.setItem("h3long_settings_v2", JSON.stringify({
+    provider: $("provider").value,
+    apiKey: $("apiKey").value,
+    modelName: $("modelName").value,
+    ollamaUrl: $("ollamaUrl").value,
+    ollamaModel: $("ollamaModel").value,
+    genMode: $("genMode").value,
+    steps: $("steps").value,
+    segLen: $("segLen").value
+  }));
+}
+
+$("provider").addEventListener("change", () => { toggleProviderUI(); updatePlanButton(); saveSettings(); });
+$("genMode").addEventListener("change", () => { toggleModeUI(); saveSettings(); });
+$("apiKey").addEventListener("change", saveSettings);
+$("modelName").addEventListener("change", saveSettings);
+$("duration").addEventListener("input", updateClipCalc);
+$("segLen").addEventListener("input", () => { updateClipCalc(); saveSettings(); });
+$("steps").addEventListener("change", saveSettings);
+
+function toggleProviderUI() {
+  const p = $("provider").value;
+  $("apiKeyGroup").style.display = (p === "none" || p === "ollama") ? "none" : "block";
+  $("ollamaGroup").style.display = p === "ollama" ? "block" : "none";
+  if (p === "xai") $("modelName").value = "grok-4";
+  if (p === "openai") $("modelName").value = "gpt-4o";
+  if (p === "anthropic") $("modelName").value = "claude-3-5-sonnet-20241022";
+}
+
+function toggleModeUI() {
+  const mode = $("genMode").value;
+  $("startImageGroup").style.display = mode === "i2v" ? "block" : "none";
+  $("modeBadge").textContent = mode === "t2v" ? "T2V" : "I2V";
+}
+
+function updateClipCalc() {
+  const total = parseFloat($("duration").value) || 60;
+  const clip = parseFloat($("segLen").value) || 4;
+  const n = Math.max(1, Math.ceil(total / clip));
+  const approx = (total / n).toFixed(1);
+  $("clipCalc").textContent = `≈ ${n} clips × ~${approx}s`;
+}
+
+function updatePlanButton() {
+  const p = $("provider").value;
+  $("btnPlan").textContent = p === "none"
+    ? "Generate Segments (local)"
+    : "Plan with LLM";
+}
+
+// ------------------------------------------------------------------
+// Planner system prompt (strong continuity + respects target_segment_seconds)
+// ------------------------------------------------------------------
+const PLANNER_SYSTEM = `You are an expert MiniMax H3 video director and prompt engineer. Your job is to turn a user's rough idea into a production-ready, shot-by-shot plan for continuous long-form video generation with seamless joins.
+
+Rules:
+1. Clean and enhance the overall concept for cinematic quality, consistent character/appearance/environment, and native audio.
+2. Break the total duration into sequential segments whose length is close to the requested target_segment_seconds (normally 3–12 s). The final segment may be slightly shorter or longer if needed.
+3. Calculate the number of segments as ceil(total_seconds / target_segment_seconds).
+4. For EVERY segment write an explicit, self-contained prompt that:
+   - When it is NOT the first segment, MUST begin with strong continuity language exactly like this (adapt the bracketed details to the scene):
+     "Continue seamlessly from the supplied first frame. Preserve the same [character, clothing, environment, lighting, camera language and complete audio continuity]. No reset, no cut, no fade."
+   - Uses the structured H3 style: integrated_multimodal_description, overall_soundscape, non_diegetic_music, tracking/camera notes.
+   - Keeps identity, wardrobe, environment, lighting and camera language consistent across all shots.
+   - Describes only what happens in that short time window and advances the action naturally.
+5. Output ONLY valid JSON in this exact schema (no markdown, no commentary):
+
+{
+  "enhanced_overall": "one-paragraph cleaned high-level description",
+  "total_seconds": 60,
+  "segments": [
+    {
+      "index": 1,
+      "approx_seconds": 4,
+      "prompt": "full H3-style prompt text..."
+    }
+  ]
+}
+
+Make the action progress logically from one shot to the next so that last-frame (or latent) chaining produces continuous motion and audio.`;
+
+// ------------------------------------------------------------------
+// Local (no-API) segment generator – strong seamless continuity
+// ------------------------------------------------------------------
+function generateLocalSegments(rawPrompt, totalSeconds, targetSegSeconds) {
+  const n = Math.max(1, Math.ceil(totalSeconds / targetSegSeconds));
+  const approx = totalSeconds / n;
+
+  const continuity = (i) => {
+    if (i === 0) return "";
+    return "Continue seamlessly from the supplied first frame. Preserve the same character appearance, clothing, environment, lighting, camera language and complete audio continuity. No reset, no cut, no fade. ";
+  };
+
+  const segments = [];
+  for (let i = 0; i < n; i++) {
+    const idx = i + 1;
+    const startT = Math.round(i * approx * 10) / 10;
+    const endT = Math.round(Math.min((i + 1) * approx, totalSeconds) * 10) / 10;
+
+    let actionFocus;
+    if (i === 0) {
+      actionFocus = "Opening sequence that establishes the scene, main subject, lighting and audio identity.";
+    } else if (i === n - 1) {
+      actionFocus = "Closing sequence that brings the action to a satisfying resolution while holding the exact same visual and audio identity.";
+    } else {
+      actionFocus = `Advance the action naturally in this time window (${startT}s–${endT}s), building directly on previous motion, energy and camera trajectory.`;
+    }
+
+    const prompt =
+`${continuity(i)}integrated_multimodal_description: ${rawPrompt}. ${actionFocus} Maintain continuous motion and consistent identity. overall_soundscape: Continuous and evolving sound design that matches the visuals with no abrupt cuts or restarts. non_diegetic_music: Consistent musical bed or score that flows across the join without interruption. tracking/camera notes: Preserve spatial relationships and motion continuity with the previous clip; prefer fluid camera language.`;
+
+    segments.push({
+      index: idx,
+      approx_seconds: Math.round(approx * 10) / 10,
+      prompt: prompt.trim()
+    });
+  }
+
+  return {
+    enhanced_overall: rawPrompt,
+    total_seconds: totalSeconds,
+    target_clip_seconds: targetSegSeconds,
+    segments
+  };
+}
+
+// ------------------------------------------------------------------
+// LLM callers (unchanged logic)
+// ------------------------------------------------------------------
+async function callLLM(userPrompt, duration) {
+  const provider = $("provider").value;
+  const model = $("modelName").value;
+  const targetSeg = parseFloat($("segLen").value) || 4;
+
+  const userMsg = `raw_user_prompt: ${userPrompt}
+total_duration_seconds: ${duration}
+target_segment_seconds: ${targetSeg}`;
+
+  if (provider === "none") throw new Error("No provider selected");
+
+  if (provider === "ollama") {
+    const url = $("ollamaUrl").value.replace(/\/$/, "") + "/api/chat";
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: $("ollamaModel").value,
+        messages: [
+          { role: "system", content: PLANNER_SYSTEM },
+          { role: "user", content: userMsg }
+        ],
+        stream: false,
+        options: { temperature: 0.4 }
+      })
+    });
+    if (!res.ok) throw new Error(`Ollama error ${res.status}`);
+    const data = await res.json();
+    return data.message?.content || "";
+  }
+
+  if (provider === "xai" || provider === "openai") {
+    const base = provider === "xai" ? "https://api.x.ai/v1" : "https://api.openai.com/v1";
+    const res = await fetch(base + "/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${$("apiKey").value}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: PLANNER_SYSTEM },
+          { role: "user", content: userMsg }
+        ],
+        temperature: 0.4
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`${provider} ${res.status}: ${err.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    return data.choices[0].message.content;
+  }
+
+  if (provider === "anthropic") {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": $("apiKey").value,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        system: PLANNER_SYSTEM,
+        messages: [{ role: "user", content: userMsg }]
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Anthropic ${res.status}: ${err.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    return data.content[0].text;
+  }
+}
+
+// ------------------------------------------------------------------
+// H3 helpers + Workflow builder (T2V / I2V aware) – logic preserved
+// ------------------------------------------------------------------
+function h3ValidLength(seconds, fps = 24) {
+  const raw = Math.max(5, Math.round(seconds * fps));
+  const k = Math.ceil((raw - 5) / 17);
+  return 17 * k + 5;
+}
+
+class WorkflowBuilder {
+  constructor() {
+    this.nodes = [];
+    this.links = [];
+    this.nextId = 1;
+    this.nextLink = 1;
+  }
+
+  addNode(type, title, pos, opts = {}) {
+    const nid = this.nextId++;
+    const node = {
+      id: nid,
+      type,
+      pos,
+      size: opts.size || [300, 120],
+      flags: {},
+      order: 0,
+      mode: 0,
+      inputs: opts.inputs || [],
+      outputs: opts.outputs || [],
+      title,
+      properties: opts.properties || {
+        cnr_id: "comfy-core",
+        ver: "0.33.0",
+        "Node name for S&R": type
+      }
+    };
+    if (opts.widgets_values) node.widgets_values = opts.widgets_values;
+    if (opts.widgets_values_named) node.widgets_values_named = opts.widgets_values_named;
+    this.nodes.push(node);
+    return nid;
+  }
+
+  link(fromNode, fromSlot, toNode, toSlot, type = "*") {
+    const lid = this.nextLink++;
+    this.links.push([lid, fromNode, fromSlot, toNode, toSlot, type]);
+
+    const src = this.nodes.find(n => n.id === fromNode);
+    if (src && fromSlot < src.outputs.length) {
+      if (!src.outputs[fromSlot].links) src.outputs[fromSlot].links = [];
+      src.outputs[fromSlot].links.push(lid);
+    }
+    const dst = this.nodes.find(n => n.id === toNode);
+    if (dst && toSlot < dst.inputs.length) {
+      dst.inputs[toSlot].link = lid;
+    }
+    return lid;
+  }
+}
+
+function buildWorkflow(segments, config) {
+  const b = new WorkflowBuilder();
+  const N = segments.length;
+  const W = config.width, H = config.height, STEPS = config.steps, FPS = 24;
+  const isT2V = config.mode === "t2v";
+  const fallbackSegLen = config.targetSegmentSeconds || 4;
+
+  // Shared loaders
+  const unetId = b.addNode("UNETLoader", "UNET", [-2200, 100], {
+    widgets_values: [config.unetName, "default"],
+    widgets_values_named: { unet_name: config.unetName, weight_dtype: "default" },
+    outputs: [{ name: "MODEL", type: "MODEL", links: [] }]
+  });
+  const clipId = b.addNode("CLIPLoader", "CLIP", [-2200, 300], {
+    size: [420, 120],
+    widgets_values: [config.clipName, "minimax", "default"],
+    widgets_values_named: { clip_name: config.clipName, type: "minimax", device: "default" },
+    outputs: [{ name: "CLIP", type: "CLIP", links: [] }]
+  });
+  const videoVaeId = b.addNode("VAELoader", "Video VAE", [-2200, 500], {
+    widgets_values: [config.videoVae],
+    widgets_values_named: { vae_name: config.videoVae },
+    outputs: [{ name: "VAE", type: "VAE", links: [] }]
+  });
+  const audioVaeId = b.addNode("VAELoader", "Audio VAE", [-2200, 700], {
+    widgets_values: [config.audioVae],
+    widgets_values_named: { vae_name: config.audioVae },
+    outputs: [{ name: "VAE", type: "VAE", links: [] }]
+  });
+
+  const easyId = b.addNode("EasyCache", "EasyCache", [-1700, -100], {
+    size: [320, 140],
+    widgets_values: [0.3, 0.2, 0.9, false],
+    widgets_values_named: { reuse_threshold: 0.3, start_percent: 0.2, end_percent: 0.9, verbose: false },
+    inputs: [{ name: "model", type: "MODEL", link: null }],
+    outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
+    properties: { cnr_id: "comfy-core", ver: "0.30.0", "Node name for S&R": "EasyCache" }
+  });
+  b.link(unetId, 0, easyId, 0, "MODEL");
+
+  const sageId = b.addNode("PathchSageAttentionKJ", "Sage Attention", [-1300, -80], {
+    size: [280, 90],
+    widgets_values: ["auto", false],
+    widgets_values_named: { sage_attention: "auto", allow_compile: false },
+    inputs: [{ name: "model", type: "MODEL", link: null }],
+    outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
+    properties: { cnr_id: "comfyui-workflow-encrypt", ver: "1.0.0", "Node name for S&R": "PathchSageAttentionKJ" }
+  });
+  b.link(easyId, 0, sageId, 0, "MODEL");
+
+  // Only create LoadImage when in I2V mode
+  let startImgId = null;
+  if (!isT2V) {
+    startImgId = b.addNode("LoadImage", "Start Image", [-2200, -350], {
+      size: [300, 320],
+      widgets_values: [config.startImage, "image"],
+      widgets_values_named: { image: config.startImage, upload: "image" },
+      outputs: [
+        { name: "IMAGE", type: "IMAGE", links: [] },
+        { name: "MASK", type: "MASK", links: [] }
+      ]
+    });
+  }
+
+  const samplerSelectId = b.addNode("KSamplerSelect", "Sampler", [-1700, 100], {
+    widgets_values: ["euler"],
+    widgets_values_named: { sampler_name: "euler" },
+    outputs: [{ name: "SAMPLER", type: "SAMPLER", links: [] }]
+  });
+
+  const stepsId = b.addNode("PrimitiveInt", "Steps", [-1700, -250], {
+    widgets_values: [STEPS, "fixed"],
+    widgets_values_named: { value: STEPS, fixed: "fixed" },
+    outputs: [{ name: "INT", type: "INT", links: [] }],
+    properties: { cnr_id: "comfy-core", ver: "0.33.0", "Node name for S&R": "PrimitiveInt" }
+  });
+
+  const lastFrameIds = [];
+  const segmentImageBatchIds = [];
+  const segmentAudioIds = [];
+  const colWidth = 750;
+  const baseX = -800;
+
+  for (let i = 0; i < N; i++) {
+    const x = baseX + i * colWidth;
+    const idx = i + 1;
+    const seg = segments[i];
+    const prompt = seg.prompt;
+    // Respect planner value, fall back to UI target segment length
+    const approxS = seg.approx_seconds || fallbackSegLen;
+    const length = h3ValidLength(approxS, FPS);
+    const seed = (config.baseSeed || 144012845932748) + i * 9973;
+
+    const noiseId = b.addNode("RandomNoise", `Noise ${idx}`, [x, 200], {
+      widgets_values: [seed, "fixed"],
+      widgets_values_named: { noise_seed: seed, control_after_generate: "fixed" },
+      outputs: [{ name: "NOISE", type: "NOISE", links: [] }]
+    });
+
+    // Conditioning node
+    const condId = b.addNode("MiniMaxH3ImageToVideo", `Segment ${idx} Conditioning`, [x, -280], {
+      size: [400, 420],
+      widgets_values: [prompt, W, H, length],
+      widgets_values_named: { prompt, width: W, height: H, length },
+      inputs: [
+        { name: "clip", type: "CLIP", link: null },
+        { name: "vae", type: "VAE", link: null },
+        { name: "first_frame", shape: 7, type: "IMAGE", link: null },
+        { name: "last_frame", shape: 7, type: "IMAGE", link: null },
+        { name: "width", type: "INT", widget: { name: "width" }, link: null },
+        { name: "height", type: "INT", widget: { name: "height" }, link: null },
+        { name: "length", type: "INT", widget: { name: "length" }, link: null }
+      ],
+      outputs: [
+        { name: "positive", type: "CONDITIONING", links: [] },
+        { name: "LATENT", type: "LATENT", links: [] }
+      ]
+    });
+    b.link(clipId, 0, condId, 0, "CLIP");
+    b.link(videoVaeId, 0, condId, 1, "VAE");
+
+    // Link first_frame only when appropriate
+    if (i === 0) {
+      if (!isT2V && startImgId !== null) {
+        b.link(startImgId, 0, condId, 2, "IMAGE");   // I2V first segment
+      }
+      // T2V first segment: leave first_frame unconnected → pure text-to-video
+    } else {
+      // Later segments always continue from previous last frame
+      b.link(lastFrameIds[i - 1], 0, condId, 2, "IMAGE");
+    }
+
+    const guiderId = b.addNode("BasicGuider", `Guider ${idx}`, [x, 350], {
+      inputs: [
+        { name: "model", type: "MODEL", link: null },
+        { name: "conditioning", type: "CONDITIONING", link: null }
+      ],
+      outputs: [{ name: "GUIDER", type: "GUIDER", links: [] }]
+    });
+    b.link(sageId, 0, guiderId, 0, "MODEL");
+    b.link(condId, 0, guiderId, 1, "CONDITIONING");
+
+    const schedId = b.addNode("BasicScheduler", `Scheduler ${idx}`, [x, 500], {
+      widgets_values: ["simple", STEPS, 1.0],
+      widgets_values_named: { scheduler: "simple", steps: STEPS, denoise: 1.0 },
+      inputs: [
+        { name: "model", type: "MODEL", link: null },
+        { name: "steps", type: "INT", widget: { name: "steps" }, link: null }
+      ],
+      outputs: [{ name: "SIGMAS", type: "SIGMAS", links: [] }]
+    });
+    b.link(sageId, 0, schedId, 0, "MODEL");
+    b.link(stepsId, 0, schedId, 1, "INT");
+
+    const samplerId = b.addNode("SamplerCustomAdvanced", `Sampler ${idx}`, [x, 650], {
+      inputs: [
+        { name: "noise", type: "NOISE", link: null },
+        { name: "guider", type: "GUIDER", link: null },
+        { name: "sampler", type: "SAMPLER", link: null },
+        { name: "sigmas", type: "SIGMAS", link: null },
+        { name: "latent_image", type: "LATENT", link: null }
+      ],
+      outputs: [
+        { name: "output", type: "LATENT", links: [] },
+        { name: "denoised_output", type: "LATENT", links: [] }
+      ]
+    });
+    b.link(noiseId, 0, samplerId, 0, "NOISE");
+    b.link(guiderId, 0, samplerId, 1, "GUIDER");
+    b.link(samplerSelectId, 0, samplerId, 2, "SAMPLER");
+    b.link(schedId, 0, samplerId, 3, "SIGMAS");
+    b.link(condId, 1, samplerId, 4, "LATENT");
+
+    const vdecId = b.addNode("VAEDecode", `Video Decode ${idx}`, [x, 850], {
+      inputs: [
+        { name: "samples", type: "LATENT", link: null },
+        { name: "vae", type: "VAE", link: null }
+      ],
+      outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+    });
+    b.link(samplerId, 0, vdecId, 0, "LATENT");
+    b.link(videoVaeId, 0, vdecId, 1, "VAE");
+
+    const adecId = b.addNode("VAEDecodeAudio", `Audio Decode ${idx}`, [x, 1000], {
+      inputs: [
+        { name: "samples", type: "LATENT", link: null },
+        { name: "vae", type: "VAE", link: null }
+      ],
+      outputs: [{ name: "AUDIO", type: "AUDIO", links: [] }]
+    });
+    b.link(samplerId, 0, adecId, 0, "LATENT");
+    b.link(audioVaeId, 0, adecId, 1, "VAE");
+
+    const createId = b.addNode("CreateVideo", `Create Video ${idx}`, [x, 1150], {
+      widgets_values: [FPS, 8],
+      widgets_values_named: { fps: FPS, bit_depth: 8 },
+      inputs: [
+        { name: "images", type: "IMAGE", link: null },
+        { name: "audio", shape: 7, type: "AUDIO", link: null }
+      ],
+      outputs: [{ name: "VIDEO", type: "VIDEO", links: [] }]
+    });
+    b.link(vdecId, 0, createId, 0, "IMAGE");
+    b.link(adecId, 0, createId, 1, "AUDIO");
+
+    const compId = b.addNode("GetVideoComponents", `Segment ${idx} Components`, [x, 1300], {
+      inputs: [{ name: "video", type: "VIDEO", link: null }],
+      outputs: [
+        { name: "images", type: "IMAGE", links: [] },
+        { name: "audio", type: "AUDIO", links: [] },
+        { name: "fps", type: "FLOAT", links: [] },
+        { name: "bit_depth", type: "INT", links: [] }
+      ]
+    });
+    b.link(createId, 0, compId, 0, "VIDEO");
+
+    const lastId = b.addNode("ImageFromBatch", `Segment ${idx} Last Frame`, [x, 1450], {
+      widgets_values: [-1, 1],
+      widgets_values_named: { batch_index: -1, length: 1 },
+      inputs: [{ name: "image", type: "IMAGE", link: null }],
+      outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+    });
+    b.link(compId, 0, lastId, 0, "IMAGE");
+    lastFrameIds.push(lastId);
+
+    if (i === 0) {
+      segmentImageBatchIds.push(compId);
+    } else {
+      const trimId = b.addNode("ImageFromBatch", `Trim Seg ${idx}`, [x, 1600], {
+        size: [380, 90],
+        widgets_values: [1, length - 1],
+        widgets_values_named: { batch_index: 1, length: length - 1 },
+        inputs: [
+          { name: "image", type: "IMAGE", link: null },
+          { name: "length", type: "INT", widget: { name: "length" }, link: null }
+        ],
+        outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+      });
+      b.link(compId, 0, trimId, 0, "IMAGE");
+      segmentImageBatchIds.push(trimId);
+    }
+    segmentAudioIds.push(compId);
+
+    const saveSegId = b.addNode("SaveVideo", `Save Segment ${idx}`, [x, 1750], {
+      size: [400, 200],
+      widgets_values: [`video/MiniMax_H3_Long_seg${String(idx).padStart(2, "0")}`, "auto", "auto"],
+      widgets_values_named: {
+        filename_prefix: `video/MiniMax_H3_Long_seg${String(idx).padStart(2, "0")}`,
+        format: "auto", codec: "auto"
+      },
+      inputs: [{ name: "video", type: "VIDEO", link: null }],
+      outputs: [
+        { name: "video_url", type: "VIDEO", links: null },
+        { name: "video", type: "VIDEO", links: null }
+      ],
+      properties: { cnr_id: "comfy-core", ver: "0.30.1", "Node name for S&R": "SaveVideo" }
+    });
+    b.link(createId, 0, saveSegId, 0, "VIDEO");
+  }
+
+  // Final join
+  const joinX = baseX + N * colWidth + 100;
+  let prevBatch = null;
+  for (let i = 0; i < N; i++) {
+    if (i === 0) { prevBatch = segmentImageBatchIds[0]; continue; }
+    const batchId = b.addNode("ImageBatch", `Join Video 1..${i+1}`, [joinX, 400 + (i-1)*80], {
+      inputs: [
+        { name: "image1", type: "IMAGE", link: null },
+        { name: "image2", type: "IMAGE", link: null }
+      ],
+      outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+    });
+    if (i === 1) b.link(segmentImageBatchIds[0], 0, batchId, 0, "IMAGE");
+    else b.link(prevBatch, 0, batchId, 0, "IMAGE");
+    b.link(segmentImageBatchIds[i], 0, batchId, 1, "IMAGE");
+    prevBatch = batchId;
+  }
+  const finalImages = N > 1 ? prevBatch : segmentImageBatchIds[0];
+
+  let prevAudio = null;
+  for (let i = 0; i < N; i++) {
+    if (i === 0) { prevAudio = segmentAudioIds[0]; continue; }
+    const concatId = b.addNode("AudioConcat", `Join Audio 1..${i+1}`, [joinX, 900 + (i-1)*80], {
+      widgets_values: ["after"],
+      widgets_values_named: { direction: "after" },
+      inputs: [
+        { name: "audio1", type: "AUDIO", link: null },
+        { name: "audio2", type: "AUDIO", link: null }
+      ],
+      outputs: [{ name: "AUDIO", type: "AUDIO", links: [] }]
+    });
+    if (i === 1) b.link(segmentAudioIds[0], 1, concatId, 0, "AUDIO");
+    else b.link(prevAudio, 0, concatId, 0, "AUDIO");
+    b.link(segmentAudioIds[i], 1, concatId, 1, "AUDIO");
+    prevAudio = concatId;
+  }
+  const finalAudio = N > 1 ? prevAudio : segmentAudioIds[0];
+
+  const finalCreate = b.addNode("CreateVideo", "Create Final Long Video", [joinX + 400, 700], {
+    widgets_values: [FPS, 8],
+    widgets_values_named: { fps: FPS, bit_depth: 8 },
+    inputs: [
+      { name: "images", type: "IMAGE", link: null },
+      { name: "audio", shape: 7, type: "AUDIO", link: null },
+      { name: "fps", type: "FLOAT", widget: { name: "fps" }, link: null },
+      { name: "bit_depth", shape: 7, type: "INT", widget: { name: "bit_depth" }, link: null }
+    ],
+    outputs: [{ name: "VIDEO", type: "VIDEO", links: [] }]
+  });
+  b.link(finalImages, 0, finalCreate, 0, "IMAGE");
+  b.link(finalAudio, N > 1 ? 0 : 1, finalCreate, 1, "AUDIO");
+  b.link(segmentAudioIds[0], 2, finalCreate, 2, "FLOAT");
+  b.link(segmentAudioIds[0], 3, finalCreate, 3, "INT");
+
+  const finalSave = b.addNode("SaveVideo", "Save Final Long Video", [joinX + 400, 900], {
+    size: [500, 300],
+    widgets_values: ["video/MiniMax_H3_Long", "auto", "auto"],
+    widgets_values_named: { filename_prefix: "video/MiniMax_H3_Long", format: "auto", codec: "auto" },
+    inputs: [{ name: "video", type: "VIDEO", link: null }],
+    outputs: [
+      { name: "video_url", type: "VIDEO", links: null },
+      { name: "video", type: "VIDEO", links: null }
+    ],
+    properties: { cnr_id: "comfy-core", ver: "0.30.1", "Node name for S&R": "SaveVideo" }
+  });
+  b.link(finalCreate, 0, finalSave, 0, "VIDEO");
+
+  b.nodes.forEach((n, i) => n.order = i);
+
+  return {
+    id: `minimax-long-dynamic-${N}x-${isT2V ? "t2v" : "i2v"}`,
+    revision: 0,
+    last_node_id: b.nextId - 1,
+    last_link_id: b.nextLink - 1,
+    nodes: b.nodes,
+    links: b.links,
+    groups: [],
+    config: {},
+    extra: { ds: { scale: 0.6, offset: [0, 0] }, frontendVersion: "1.49.6" },
+    version: 0.4
+  };
+}
+
+// ------------------------------------------------------------------
+// UI actions
+// ------------------------------------------------------------------
+function showStatus(msg, type = "info") {
+  const el = $("status");
+  el.textContent = msg;
+  el.className = "status " + type;
+}
+
+$("btnPlan").addEventListener("click", async () => {
+  const prompt = $("userPrompt").value.trim();
+  const duration = parseFloat($("duration").value) || 60;
+  const segLen = parseFloat($("segLen").value) || 4;
+  const provider = $("provider").value;
+
+  if (!prompt) return showStatus("Enter a prompt first", "error");
+
+  // Local generator path (no API)
+  if (provider === "none") {
+    showStatus("Generating local continuity-aware segments…", "info");
+    try {
+      const plan = generateLocalSegments(prompt, duration, segLen);
+      $("segmentsJson").value = JSON.stringify(plan, null, 2);
+      showStatus(`Created ${plan.segments.length} segments (~${segLen}s each) with strong continuity language for seamless joins`, "success");
+    } catch (e) {
+      showStatus("Local generation error: " + e.message, "error");
+    }
+    return;
+  }
+
+  // LLM path
+  $("btnPlan").disabled = true;
+  showStatus("Calling LLM…", "info");
+
+  try {
+    let text = await callLLM(prompt, duration);
+    text = text.trim();
+    if (text.startsWith("```")) {
+      text = text.replace(/^```(?:json)?\\n?/, "").replace(/\\n?```$/, "");
+    }
+    const plan = JSON.parse(text);
+    if (!plan.segments) throw new Error("Response missing segments");
+    $("segmentsJson").value = JSON.stringify(plan, null, 2);
+    showStatus(`Received ${plan.segments.length} segments (target ~${segLen}s each) – continuity language included`, "success");
+  } catch (e) {
+    showStatus("Error: " + e.message, "error");
+  } finally {
+    $("btnPlan").disabled = false;
+  }
+});
+
+$("btnGenerate").addEventListener("click", () => {
+  let plan;
+  try {
+    plan = JSON.parse($("segmentsJson").value);
+  } catch (e) {
+    return showStatus("Invalid JSON in segments editor", "error");
+  }
+  if (!plan.segments || !plan.segments.length) {
+    return showStatus("No segments found", "error");
+  }
+
+  const mode = $("genMode").value;
+  if (mode === "i2v" && !$("startImage").value.trim()) {
+    return showStatus("Start image filename is required in I2V mode", "error");
+  }
+
+  const config = {
+    mode,
+    width: parseInt($("width").value) || 768,
+    height: parseInt($("height").value) || 1344,
+    steps: parseInt($("steps").value) || 8,
+    startImage: $("startImage").value || "start_frame.png",
+    unetName: $("unetName").value,
+    clipName: $("clipName").value,
+    videoVae: $("videoVae").value,
+    audioVae: $("audioVae").value,
+    baseSeed: 144012845932748,
+    targetSegmentSeconds: parseFloat($("segLen").value) || 4
+  };
+
+  showStatus("Building workflow…", "info");
+  const doc = buildWorkflow(plan.segments, config);
+  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `minimax_long_${plan.segments.length}x_${mode}.json`;
+  a.click();
+  showStatus(`Downloaded workflow (${doc.last_node_id} nodes, ${doc.last_link_id} links) – ${mode.toUpperCase()} • last-frame chaining + continuity prompts ready`, "success");
+});
+
+$("btnDownloadSeg").addEventListener("click", () => {
+  try {
+    const plan = JSON.parse($("segmentsJson").value);
+    const blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "segments.json";
+    a.click();
+  } catch (e) {
+    showStatus("Invalid segments JSON", "error");
+  }
+});
+
+loadSettings();
+</script>
+</body>
+</html>
