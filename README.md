@@ -1,12 +1,58 @@
 # MiniMax H3 Long Video – Hybrid Dynamic Workflow
 
-This system generates long MiniMax H3 videos by:
+Generate long MiniMax H3 videos by chaining short clips with strong continuity.
 
-1. Using an LLM (Grok recommended) to clean a user prompt and break it into sequential ~10-second shot prompts with strong continuity language.
-2. Feeding those segments into a Python generator that builds a complete ComfyUI workflow JSON with the correct number of chained segments.
-3. Loading the generated JSON into ComfyUI.
+**Two ways to work:**
 
-The approach uses last-frame chaining with aggressive continuity prompting. It is a solid, working foundation. True latent/motion-context continuity (H3 Project Suite / Extender nodes) can be added later.
+1. **Browser frontend (recommended for most users)** – single HTML file, zero install for planning + workflow generation.
+2. **Python CLI** – original generator script for power users and automation.
+
+Both produce the same ComfyUI workflow JSON with last-frame chaining, frame trimming, and audio/video concatenation.
+
+---
+
+## Browser Frontend (new)
+
+**File:** [`MiniMax_H3_Long_Workflow_Generator.html`](MiniMax_H3_Long_Workflow_Generator.html)
+
+Open the file in any modern browser. No Python, no server, no install required for the planner + workflow builder.
+
+### Screenshot – Main UI
+
+![Browser frontend – Prompt, duration, provider, mode & settings](https://raw.githubusercontent.com/daexchef/Minimax_Grok/main/docs/browser-ui-top.png)
+
+*(If the image above is missing, open the HTML locally – the live UI looks exactly like the dark-themed panels shown in the repo screenshots.)*
+
+### What the browser tool does
+
+| Feature | Details |
+|---------|---------|
+| **Prompt + Duration** | Type a free-form idea. Set total length (e.g. 60 s) and target clip length (default **4 s** → 15 clips). Live calculator shows exact clip count. |
+| **Local segment generator** | Provider = “None / Local generator” creates continuity-aware segments instantly (no API key). Every non-first clip starts with strong “Continue seamlessly… No reset, no cut, no fade” language. |
+| **LLM planning (optional)** | Grok (xAI), OpenAI, Anthropic, or local Ollama. Same planner system prompt used by the Python path. |
+| **T2V or I2V** | Pure Text-to-Video (first segment has no start image) or Image-to-Video (requires `start_frame.png` in ComfyUI input). |
+| **Editable segments** | Full JSON editor. Continuity language is already injected. |
+| **One-click workflow JSON** | Generates the complete ComfyUI graph (shared loaders, EasyCache, SageAttention, per-segment MiniMaxH3ImageToVideo + sampling + decode + last-frame hand-off + final join). |
+| **Speed defaults** | Steps default to **8** (ready for Turbo LoRA). Tips panel explains 6–8 step + Turbo LoRA path for 3–5× speedups. |
+| **Seamless joining guidance** | Built-in notes on last-frame chaining vs true latent/motion-context (Project Suite / Extender). |
+
+### Quick browser workflow
+
+1. Open `MiniMax_H3_Long_Workflow_Generator.html` in Chrome / Edge / Firefox.
+2. Enter your video idea.
+3. Set **Total duration** = 60 and **Target segment / clip length** = 4 (or whatever you prefer).
+4. Click **Generate Segments (local)** (or switch provider and use an LLM).
+5. Choose T2V or I2V, set resolution/steps if desired.
+6. Click **Generate Workflow JSON** → download the `.json`.
+7. Drag the JSON into ComfyUI, confirm the Start Image node (I2V only), queue.
+
+The generated workflow already contains:
+
+- Shared UNET / CLIP / VAEs + EasyCache + PathchSageAttentionKJ
+- Per-segment conditioning → sampling → video + audio decode
+- Last-frame extraction → next-segment first-frame link
+- Duplicate-frame trimming on later segments
+- Final ImageBatch + AudioConcat + CreateVideo + SaveVideo
 
 ---
 
@@ -14,13 +60,14 @@ The approach uses last-frame chaining with aggressive continuity prompting. It i
 
 | File | Purpose |
 |------|---------|
-| `generate_h3_long_workflow.py` | Core generator. Takes a segments list and emits a full ComfyUI workflow JSON with proper node connections. |
-| `run_h3_long_from_prompt.py` | Optional helper. Calls the Grok API, saves `segments.json`, then runs the generator. |
-| `segments.json` | Example / working planner output (structured list of shot prompts). |
+| `MiniMax_H3_Long_Workflow_Generator.html` | **Browser frontend** – local + LLM segment planning, T2V/I2V, full workflow JSON generation |
+| `generate_h3_long_workflow.py` | Core Python generator (same node graph the browser emits) |
+| `segments.json` | Example planner output |
+| `PromptGen.md` | Additional prompt guidance |
 
 ---
 
-## Prerequisites
+## Prerequisites (ComfyUI side)
 
 ### ComfyUI
 - Recent ComfyUI (0.30+ recommended for native MiniMax H3 support)
@@ -41,67 +88,33 @@ models/vae/
   minimax_h3_audio_vae_fp32.safetensors
 ```
 
-### Python
-```bash
-pip install openai   # only needed for the Grok helper script
-```
-
-### Start image
-Prepare a starting frame that matches the first segment (same character, clothing, environment, framing). Name it something simple (e.g. `start_frame.png`) and put it in ComfyUI’s input folder.
+### Start image (I2V mode only)
+Prepare a starting frame that matches the first segment (same character, clothing, environment, framing). Put it in ComfyUI’s input folder (e.g. `start_frame.png`).
 
 ---
 
-## Quick Start (Manual – recommended first)
+## Python CLI path (still fully supported)
 
-### 1. Create or obtain `segments.json`
+### 1. Create `segments.json`
 
-You can:
+Use the browser local generator, or paste the planner system prompt into Grok / Claude / etc., or write it by hand.
 
-- Use the example `segments.json` provided, or
-- Ask Grok (or any strong LLM) with the planner system prompt below, or
-- Write the segments by hand.
-
-**Planner system prompt** (paste into Grok / Claude / etc.):
+**Planner system prompt** (used by both browser and Python helper):
 
 ```text
-You are an expert MiniMax H3 video director and prompt engineer. Your job is to turn a user's rough idea into a production-ready, shot-by-shot plan for continuous long-form video generation.
-
-Input you will receive:
-- raw_user_prompt: the user's original idea
-- total_duration_seconds: desired total length
+You are an expert MiniMax H3 video director and prompt engineer. Your job is to turn a user's rough idea into a production-ready, shot-by-shot plan for continuous long-form video generation with seamless joins.
 
 Rules:
-1. First, clean and enhance the overall concept for cinematic quality, consistency of character/appearance/environment, and native audio.
-2. Break the total duration into sequential segments of approximately 10 seconds each (aim for 9–11 s). The final segment may be shorter if needed.
-3. For every segment write an explicit, self-contained prompt that:
-   - Starts with strong continuity language when it is not the first segment ("Continue seamlessly from the supplied first frame. Preserve the same [character, clothing, environment, lighting and audio continuity]. No reset, no cut, no fade.")
-   - Uses the structured style H3 responds well to (integrated_multimodal_description, overall_soundscape, non_diegetic_music, tracking/camera notes).
-   - Keeps identity, wardrobe, environment, and camera language consistent across all shots.
-   - Describes only what happens in that ~10 s window, advancing the action naturally.
-4. Output ONLY valid JSON in this exact schema (no markdown, no commentary):
-
-{
-  "enhanced_overall": "one-paragraph cleaned high-level description",
-  "total_seconds": 60,
-  "segments": [
-    {
-      "index": 1,
-      "approx_seconds": 10,
-      "prompt": "full H3-style prompt text for this shot..."
-    }
-  ]
-}
-
-Calculate the number of segments as ceil(total_seconds / 10). Make the action progress logically from one shot to the next.
+1. Clean and enhance the overall concept for cinematic quality, consistent character/appearance/environment, and native audio.
+2. Break the total duration into sequential segments whose length is close to the requested target_segment_seconds (normally 3–12 s).
+3. Calculate the number of segments as ceil(total_seconds / target_segment_seconds).
+4. For EVERY segment write an explicit, self-contained prompt that:
+   - When it is NOT the first segment, MUST begin with strong continuity language:
+     "Continue seamlessly from the supplied first frame. Preserve the same [character, clothing, environment, lighting, camera language and complete audio continuity]. No reset, no cut, no fade."
+   - Uses the structured H3 style: integrated_multimodal_description, overall_soundscape, non_diegetic_music, tracking/camera notes.
+   - Keeps identity, wardrobe, environment, lighting and camera language consistent.
+5. Output ONLY valid JSON in this exact schema (no markdown, no commentary).
 ```
-
-Example call:
-```
-raw_user_prompt: A skilled middle-aged chef preparing classic French onion soup from start to finish in a professional kitchen
-total_duration_seconds: 60
-```
-
-Save the pure JSON output as `segments.json`.
 
 ### 2. Generate the ComfyUI workflow
 
@@ -112,134 +125,53 @@ python generate_h3_long_workflow.py \
   --start-image start_frame.png \
   --width 768 \
   --height 1344 \
-  --steps 20
+  --steps 8
 ```
 
-Key options:
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--segments` | — | Path to planner JSON |
-| `--output` | `h3_long_dynamic.json` | Output workflow filename |
-| `--start-image` | `Krea2_00001_FHD.png` | Filename of the first frame (must exist in ComfyUI input) |
-| `--width` / `--height` | 768 / 1344 | Resolution (multiple of 32) |
-| `--steps` | 20 | Sampling steps |
-| `--seed` | fixed base | Base seed (increments per segment) |
+(Use `--steps 8` when a Turbo LoRA is loaded; otherwise 16–20 for the base model.)
 
 ### 3. Load into ComfyUI
 
 1. Open ComfyUI.
-2. Load the generated `.json` (Drag & drop or Load button).
-3. Confirm the Start Image node points to your actual start frame.
+2. Load the generated `.json`.
+3. Confirm the Start Image node (I2V) points to your actual start frame.
 4. Queue the prompt.
 
-The workflow will:
-- Generate each ~10 s segment sequentially
-- Feed the last frame of segment N into the first frame of segment N+1
-- Trim the duplicate first frame on later segments
-- Concatenate video + audio
-- Save individual segments and a final long video
+The workflow will generate each segment sequentially, feed the last frame of segment N into segment N+1, trim the duplicate first frame, concatenate video + audio, and save both individual segments and the final long video.
 
 ---
 
-## Automated Path (Grok API helper)
+## Speed recommendations
 
-If you have an xAI API key:
+| Lever | Typical gain | Notes |
+|-------|--------------|-------|
+| **Turbo LoRA** (v4 / EMA preferred) | 3–5× on sampling | Drop steps to 6–8. Strength ≈ 1.0. |
+| **SageAttention / PathchSageAttentionKJ** | 1.5–2× | Already wired in every generated workflow. |
+| **EasyCache** | Extra 10–30 % | Already present. |
+| **Shorter draft resolution** | Large | Iterate at 480–640p, final at 768×1344. |
 
-```bash
-export XAI_API_KEY="your-key-here"
+Peak VRAM stays roughly equal to a single clip because generation is sequential.
 
-python run_h3_long_from_prompt.py \
-  --prompt "A skilled middle-aged chef preparing classic French onion soup from start to finish" \
-  --duration 60 \
-  --start-image start_frame.png \
-  --width 768 --height 1344 \
-  --output minimax_long_60s.json
-```
+---
 
-This will:
-1. Call Grok with the planner system prompt
-2. Save `segments.json`
-3. Immediately generate the ComfyUI workflow JSON
+## Seamless joining notes
 
-You can also skip the API call and reuse an existing segments file:
-
-```bash
-python run_h3_long_from_prompt.py --skip-api --segments-out segments.json --output minimax_long_60s.json
-```
+- **Current method**: last-frame → first-frame + aggressive continuity language in every prompt. Works well and is what both the browser and Python generators emit.
+- **Better continuity**: install `ComfyUI-H3-Project-Suite` or `ComfyUI_MiniMax_H3_Extender` and later swap the hand-off to latent / motion-context mode. The generator structure is designed to make that upgrade straightforward.
+- **4-second clips** give tight control (15 joins on a 60 s video) but create more potential soft resets. 6–10 s is often a better continuity/speed compromise.
 
 ---
 
 ## Important Notes
 
-### Start image matching
-The first segment is conditioned on the start image. For best results the start image should already look like the beginning of the first prompt (same person, clothing, environment, camera angle). A mismatch forces the model to reconcile conflicting signals.
-
-### Continuity quality
-The current system uses classic last-frame → first-frame chaining plus strong continuity language in the prompts. This works, but motion and audio can still soft-reset at joins. For significantly better continuity, the next upgrade is to emit nodes from:
-
-- ComfyUI-H3-Project-Suite (latent-mode handoff)
-- or ComfyUI_MiniMax_H3_Extender
-
-The generator is structured so that swap is relatively straightforward.
+### Start image matching (I2V)
+The first segment is conditioned on the start image. For best results the start image should already look like the beginning of the first prompt (same person, clothing, environment, camera angle).
 
 ### Frame length
-MiniMax H3 snaps duration to the `17k + 5` grid at 24 fps. The generator automatically computes valid lengths (e.g. ~10 s → 243 frames).
-
-### VRAM
-Each segment is generated sequentially, so peak VRAM is roughly that of a single ~10–12 s clip. Longer individual segments increase VRAM; more segments increase total time but not peak memory.
+MiniMax H3 snaps duration to the `17k + 5` grid at 24 fps. Both generators automatically compute valid lengths.
 
 ### Seeds
-By default seeds are fixed and offset per segment (`base + i * 9973`). Change `--seed` or edit the script if you want full randomization.
-
----
-
-## Configuration Defaults (inside the script)
-
-```python
-DEFAULTS = {
-    "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
-    "clip_name": "qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors",
-    "video_vae": "minimax_h3_video_vae_fp16.safetensors",
-    "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
-    "start_image": "Krea2_00001_FHD.png",
-    "width": 768,
-    "height": 1344,
-    "steps": 20,
-    "sampler_name": "euler",
-    "scheduler": "simple",
-    "fps": 24,
-    "target_segment_seconds": 10.0,
-    "filename_prefix": "video/MiniMax_H3_Long",
-    "seed_mode": "fixed",
-    "base_seed": 144012845932748,
-}
-```
-
-Edit these in `generate_h3_long_workflow.py` if you use different model filenames.
-
----
-
-## Typical Workflow
-
-1. Write or generate a good `segments.json` (planner prompt above).
-2. Make sure your start frame matches the first segment.
-3. Run the generator → get a `.json` workflow.
-4. Load into ComfyUI, verify the Start Image node, queue.
-5. Review individual segment saves if a join looks weak, then re-generate only the problem segment if needed (advanced).
-
----
-
-## Optional: Browser Version
-
-A fully browser-based version also exists (single HTML file). It supports:
-
-- Optional LLM calls (Grok / OpenAI / Anthropic / Ollama)
-- Manual segment editing
-- Same workflow generation logic
-- No Python required
-
-Ask for the HTML version if you prefer a pure front-end tool.
+By default seeds are fixed and offset per segment (`base + i * 9973`).
 
 ---
 
@@ -247,21 +179,20 @@ Ask for the HTML version if you prefer a pure front-end tool.
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| No wires visible in ComfyUI | Old generator version | Use the fixed `generate_h3_long_workflow.py` (link fields are now populated) |
-| Identity changes between segments | Weak continuity language or mismatched start image | Strengthen the “Continue seamlessly…” prefix and match the start frame |
+| Identity changes between segments | Weak continuity language or mismatched start image | Use the browser local generator (it injects strong continuity) and match the start frame |
 | OOM | Segment too long / resolution too high | Lower duration per segment or resolution |
 | Audio cuts at joins | Expected with last-frame method | Acceptable for now; latent continuity packs improve this |
-| Model not found | Filename mismatch | Check the exact filenames in your models folders and update DEFAULTS |
+| Model not found | Filename mismatch | Check exact filenames in your models folders |
 
 ---
 
 ## Next Upgrades (optional)
 
 - Swap the conditioning/sampling section to use H3 Project Suite latent context nodes for true motion + audio continuity.
-- Add Turbo LoRA support for fewer steps / faster generation.
+- Deeper Turbo LoRA integration (automatic LoRA loader node).
 - Multi-GPU segment parallelization (advanced).
 
 ---
 
-Generated for the hybrid dynamic MiniMax H3 pipeline.  
-Load the resulting JSON into ComfyUI and queue.
+**Browser frontend is the fastest way to go from idea → continuity-aware segments → ready-to-queue ComfyUI workflow.**  
+Open `MiniMax_H3_Long_Workflow_Generator.html` and start generating.
