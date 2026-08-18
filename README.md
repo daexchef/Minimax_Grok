@@ -17,11 +17,13 @@ Both produce the same ComfyUI workflow JSON with last-frame chaining, frame trim
 
 Open the file in any modern browser. No Python, no server, no install required for the planner + workflow builder.
 
-### Screenshot – Main UI
+### Main UI
 
-![Browser frontend – Prompt, duration, provider, mode & settings](https://raw.githubusercontent.com/daexchef/Minimax_Grok/main/docs/browser-ui-top.png)
+![Browser frontend – full main interface with prompt, provider, mode settings and segments](docs/browser-ui-main.png)
 
-*(If the image above is missing, open the HTML locally – the live UI looks exactly like the dark-themed panels shown in the repo screenshots.)*
+### Speed & Seamless Joining panel
+
+![Speed & Seamless Joining tips panel](docs/browser-ui-tips.png)
 
 ### What the browser tool does
 
@@ -61,6 +63,8 @@ The generated workflow already contains:
 | File | Purpose |
 |------|---------|
 | `MiniMax_H3_Long_Workflow_Generator.html` | **Browser frontend** – local + LLM segment planning, T2V/I2V, full workflow JSON generation |
+| `docs/browser-ui-main.png` | Screenshot of the main browser UI |
+| `docs/browser-ui-tips.png` | Screenshot of the Speed & Seamless Joining tips panel |
 | `generate_h3_long_workflow.py` | Core Python generator (same node graph the browser emits) |
 | `segments.json` | Example planner output |
 | `PromptGen.md` | Additional prompt guidance |
