@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LTX-2.5 Long Workflow Generator</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #e08a3c;
+    --accent-hover: #f0a05c;
+    --success: #3ecf8e;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.55rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 26px; font-size: 0.93rem; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .panel h2 { font-size: 1.05rem; margin-bottom: 14px; color: var(--accent); }
+  label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea {
+    width: 100%;
+    background: #12151b;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 9px 12px;
+    font-size: 0.93rem;
+    margin-bottom: 12px;
+  }
+  textarea { min-height: 100px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86rem; }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
+  button {
+    background: var(--accent);
+    color: #1a1208;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.93rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button:hover { background: var(--accent-hover); }
+  button.secondary { background: #2a3140; color: var(--text); font-weight: 500; }
+  button.secondary:hover { background: #353e52; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .status { margin-top: 14px; padding: 11px 14px; border-radius: 8px; font-size: 0.88rem; display: none; }
+  .status.info { background: #1c2433; color: #a8c0ff; display: block; }
+  .status.success { background: #14332a; color: var(--success); display: block; }
+  .status.error { background: #331c1c; color: var(--danger); display: block; }
+  .full { grid-column: 1 / -1; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: -6px; margin-bottom: 10px; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 0.88rem; }
+  .mode-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: #3a2a18;
+    color: #f0b070;
+    margin-left: 8px;
+  }
+  .clip-calc { display: inline-block; margin-left: 8px; font-size: 0.82rem; color: var(--accent); font-weight: 600; }
+  .tips-list { font-size: 0.85rem; color: var(--muted); padding-left: 18px; }
+  .tips-list li { margin-bottom: 7px; }
+  .tips-list strong { color: var(--text); }
+  .speed-note {
+    background: #2a2218;
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.85rem;
+    margin-top: 12px;
+    color: #e6c9a8;
+  }
+  code { font-size: 0.84em; background: #12151b; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h1>LTX-2.5 Long Workflow Generator <span class="mode-badge" id="modeBadge">T2V</span></h1>
+<p class="subtitle">Browser-based • API optional • Same planner + last-frame chaining as MiniMax H3, expanded from the official LTX-2.5 two-stage T2V graph</p>
+
+<div class="grid">
+
+  <div class="panel">
+    <h2>1. Prompt &amp; Duration</h2>
+    <label>Raw prompt / idea</label>
+    <textarea id="userPrompt" placeholder="A young woman pouring tea in a sunlit kitchen as illustrated golden butterflies slowly emerge from the steam..."></textarea>
+
+    <div class="row">
+      <div>
+        <label>Total duration (seconds)</label>
+        <input type="number" id="duration" value="30" min="5" max="600" step="1">
+      </div>
+      <div>
+        <label>Target segment / clip length (s)</label>
+        <input type="number" id="segLen" value="5" min="3" max="20" step="1">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Join settle (LTX latent steps)</label>
+        <input type="number" id="joinSettle" value="1" min="1" max="3" step="1">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <p class="hint" id="joinSettleHint" style="margin-top:8px">Trims 8 frames (~0.33 s) after the locked first frame on later clips.</p>
+      </div>
+    </div>
+    <p class="hint">
+      Live calc: <span class="clip-calc" id="clipCalc">≈ 6 clips</span>
+      &nbsp;·&nbsp; LTX frame count is <code>8n+1</code> (official: duration × fps + 1).
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2>2. LLM Provider (optional)</h2>
+    <label>Provider</label>
+    <select id="provider">
+      <option value="none">None / Local generator (no API)</option>
+      <option value="xai">Grok (xAI)</option>
+      <option value="openai">OpenAI</option>
+      <option value="anthropic">Anthropic</option>
+      <option value="ollama">Ollama (local)</option>
+    </select>
+
+    <div id="apiKeyGroup">
+      <label>API Key (stored only in this browser)</label>
+      <input type="password" id="apiKey" placeholder="sk-... or xai-...">
+      <p class="hint">Keys stay in localStorage. Browser CORS may block some cloud providers — Ollama works best for local use.</p>
+    </div>
+
+    <div id="ollamaGroup" style="display:none">
+      <label>Ollama base URL</label>
+      <input type="text" id="ollamaUrl" value="http://localhost:11434">
+      <label>Ollama model</label>
+      <input type="text" id="ollamaModel" value="qwen2.5:32b">
+    </div>
+
+    <label>Model name (cloud providers)</label>
+    <input type="text" id="modelName" value="grok-4" placeholder="grok-4 / gpt-4o / claude-3-5-sonnet-...">
+  </div>
+
+  <div class="panel full">
+    <h2>3. Mode &amp; Workflow Settings</h2>
+
+    <label>Generation mode</label>
+    <select id="genMode">
+      <option value="t2v" selected>Text-to-Video (no start image needed)</option>
+      <option value="i2v">Image-to-Video (requires start image)</option>
+    </select>
+
+    <div id="startImageGroup" style="display:none">
+      <label>Start image filename (must exist in ComfyUI input folder)</label>
+      <input type="text" id="startImage" value="start_frame.png">
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Width (multiple of 64)</label>
+        <input type="number" id="width" value="1280" step="64">
+      </div>
+      <div>
+        <label>Height (multiple of 64)</label>
+        <input type="number" id="height" value="720" step="64">
+      </div>
+      <div>
+        <label>FPS</label>
+        <input type="number" id="fps" value="24" min="8" max="60">
+      </div>
+    </div>
+    <p class="hint">Official distilled template uses 1280×720 @ 24 fps. Latents are generated at half res then spatially upsampled ×2.</p>
+
+    <label>Negative prompt</label>
+    <input type="text" id="negative" value="pc game, console game, video game, cartoon, childish, ugly, blurry, watermark, subtitles">
+
+    <details>
+      <summary>Advanced model names &amp; distilled sigmas</summary>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>UNET</label>
+          <input type="text" id="unetName" value="ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors">
+        </div>
+        <div>
+          <label>CLIP (Gemma 4 12B)</label>
+          <input type="text" id="clipName" value="gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Video VAE</label>
+          <input type="text" id="videoVae" value="ltx-2.5-video-vae-bf16.safetensors">
+        </div>
+        <div>
+          <label>Audio VAE</label>
+          <input type="text" id="audioVae" value="ltx-2.5-audio-vae-bf16.safetensors">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Latent upscaler ×2</label>
+          <input type="text" id="upscaleModel" value="ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors">
+        </div>
+        <div>
+          <label>Sampler</label>
+          <input type="text" id="samplerName" value="euler_ancestral">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Low-res sigmas (distilled)</label>
+          <input type="text" id="sigmasLow" value="1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0">
+        </div>
+        <div>
+          <label>High-res sigmas (distilled)</label>
+          <input type="text" id="sigmasHigh" value="0.85, 0.7250, 0.4219, 0.0">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Video CFG</label>
+          <input type="number" id="videoCfg" value="1" min="0" max="20" step="0.1">
+        </div>
+        <div>
+          <label>Audio CFG</label>
+          <input type="number" id="audioCfg" value="1" min="0" max="20" step="0.1">
+        </div>
+      </div>
+      <p class="hint">Distilled LTX-2.5 uses CFG 1 + the official ManualSigmas lists. Full (non-distilled) models typically want higher CFG.</p>
+    </details>
+  </div>
+
+  <div class="panel full">
+    <h2>4. Segments (editable)</h2>
+    <p class="hint">Paste planner JSON, edit by hand, generate locally, or let an LLM create it. Continuity language is injected on non-first segments. First segment is pure T2V when that mode is selected; later segments lock the previous last frame via <code>LTXVImgToVideoInplace</code> + <code>LTXVAddGuide</code>.</p>
+    <textarea id="segmentsJson" style="min-height:210px" placeholder='{"enhanced_overall":"...","total_seconds":30,"segments":[{"index":1,"approx_seconds":5,"prompt":"..."}]}'></textarea>
+  </div>
+
+  <div class="panel full">
+    <div class="actions">
+      <button id="btnPlan">Generate Segments (local)</button>
+      <button id="btnGenerate" class="secondary">Generate Workflow JSON</button>
+      <button id="btnDownloadSeg" class="secondary">Download segments.json</button>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="panel full">
+    <h2>How this maps to official LTX-2.5 T2V</h2>
+    <ul class="tips-list">
+      <li><strong>Shared stack</strong> matches <code>video_ltx2_5_t2v.json</code>: distilled transformer, Gemma 4 CLIP, video + audio VAEs, latent ×2 upsampler, dual CFG guiders, two-stage sampling (low-res then high-res).</li>
+      <li><strong>Chaining</strong> is the MiniMax pattern: last decoded frame of clip N becomes the first-frame guide of clip N+1. After the lock, a settle window (1 LTX step = 8 frames by default) is dropped and audio is re-muxed to the kept pictures.</li>
+      <li><strong>T2V first clip</strong> uses empty latents only. <strong>I2V first clip</strong> (and every later clip) injects the image at half-res with <code>LTXVImgToVideoInplace</code>, then again after upscale with <code>LTXVAddGuide</code> at frame 0, strength 1.</li>
+      <li><strong>Do not wrap this in the official subgraph.</strong> Subgraphs hide the last-frame wire. The generator emits a flat graph you can queue as-is.</li>
+      <li><strong>5 s clips</strong> match the official default duration. Shorter clips = more joins. 8–10 s is a better continuity/speed compromise for long pieces.</li>
+    </ul>
+    <div class="speed-note">
+      After download, load the JSON in ComfyUI. Peak VRAM stays close to a single LTX-2.5 clip because segments run sequentially. Confirm model filenames match your <code>models/</code> folders.
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function loadSettings() {
+  const s = JSON.parse(localStorage.getItem("ltx25_long_settings_v1") || "{}");
+  ["provider","apiKey","modelName","ollamaUrl","ollamaModel","genMode","segLen","joinSettle","width","height","fps","negative","unetName","clipName","videoVae","audioVae","upscaleModel","samplerName","sigmasLow","sigmasHigh","videoCfg","audioCfg"].forEach(k => {
+    if (s[k] != null && $(k)) $(k).value = s[k];
+  });
+  toggleProviderUI();
+  toggleModeUI();
+  updateClipCalc();
+  updatePlanButton();
+}
+function saveSettings() {
+  const keys = ["provider","apiKey","modelName","ollamaUrl","ollamaModel","genMode","segLen","joinSettle","width","height","fps","negative","unetName","clipName","videoVae","audioVae","upscaleModel","samplerName","sigmasLow","sigmasHigh","videoCfg","audioCfg"];
+  const o = {};
+  keys.forEach(k => { if ($(k)) o[k] = $(k).value; });
+  localStorage.setItem("ltx25_long_settings_v1", JSON.stringify(o));
+}
+
+$("provider").addEventListener("change", () => { toggleProviderUI(); updatePlanButton(); saveSettings(); });
+$("genMode").addEventListener("change", () => { toggleModeUI(); saveSettings(); });
+$("duration").addEventListener("input", updateClipCalc);
+$("segLen").addEventListener("input", () => { updateClipCalc(); saveSettings(); });
+$("joinSettle").addEventListener("input", () => { updateClipCalc(); saveSettings(); });
+$("fps").addEventListener("input", () => { updateClipCalc(); saveSettings(); });
+["apiKey","modelName","width","height","negative","videoCfg","audioCfg"].forEach(id => {
+  $(id).addEventListener("change", saveSettings);
+});
+
+function toggleProviderUI() {
+  const p = $("provider").value;
+  $("apiKeyGroup").style.display = (p === "none" || p === "ollama") ? "none" : "block";
+  $("ollamaGroup").style.display = p === "ollama" ? "block" : "none";
+  if (p === "xai") $("modelName").value = "grok-4";
+  if (p === "openai") $("modelName").value = "gpt-4o";
+  if (p === "anthropic") $("modelName").value = "claude-3-5-sonnet-20241022";
+}
+function toggleModeUI() {
+  const mode = $("genMode").value;
+  $("startImageGroup").style.display = mode === "i2v" ? "block" : "none";
+  $("modeBadge").textContent = mode === "t2v" ? "T2V" : "I2V";
+}
+function updateClipCalc() {
+  const total = parseFloat($("duration").value) || 30;
+  const clip = parseFloat($("segLen").value) || 5;
+  const fps = parseFloat($("fps").value) || 24;
+  const n = Math.max(1, Math.ceil(total / clip));
+  const approx = (total / n).toFixed(1);
+  const settle = Math.max(1, parseInt($("joinSettle").value) || 1);
+  const trimFrames = 8 * settle;
+  $("clipCalc").textContent = `≈ ${n} clips × ~${approx}s (${ltxValidLength(parseFloat(approx), fps)} frames)`;
+  $("joinSettleHint").textContent =
+    `Later clips generate ${trimFrames} extra frames and drop them after the locked first frame (~${(trimFrames / fps).toFixed(2)}s settle). Audio is re-muxed to the trimmed picture.`;
+}
+function updatePlanButton() {
+  $("btnPlan").textContent = $("provider").value === "none"
+    ? "Generate Segments (local)"
+    : "Plan with LLM";
+}
+
+const PLANNER_SYSTEM = `You are an expert LTX-2.5 video director. Turn a user's rough idea into a shot-by-shot plan for continuous long-form video with last-frame chaining.
+
+Rules:
+1. Clean and enhance the overall concept for cinematic quality, consistent character/appearance/environment, and native audio.
+2. Break the total duration into sequential segments close to target_segment_seconds. Number of segments = ceil(total_seconds / target_segment_seconds).
+3. For EVERY segment write an explicit, self-contained prompt that:
+   - When it is NOT the first segment, MUST begin with:
+     "Continue seamlessly from the supplied first frame. Preserve the same [character, clothing, environment, lighting, camera language and complete audio continuity]. No reset, no cut, no fade."
+   - The FIRST ~1 second of a non-first segment must match the incoming last frame: same shot size, same lens, same subject pose, same action already in progress. Do not jump to a new framing or pop new VFX on frame 1.
+   - New story beats and camera distance changes may only begin AFTER that first second.
+   - End each segment mid-motion (do not park on a held pose).
+   - Describe camera, lighting, action, and sound in natural cinematic prose (LTX-2.5 prefers this over keyword tags).
+4. Output ONLY valid JSON:
+
+{
+  "enhanced_overall": "one-paragraph cleaned high-level description",
+  "total_seconds": 30,
+  "segments": [
+    { "index": 1, "approx_seconds": 5, "prompt": "full cinematic prompt..." }
+  ]
+}`;
+
+function generateLocalSegments(rawPrompt, totalSeconds, targetSegSeconds) {
+  const n = Math.max(1, Math.ceil(totalSeconds / targetSegSeconds));
+  const approx = totalSeconds / n;
+  const continuity = (i) => i === 0 ? "" :
+    "Continue seamlessly from the supplied first frame. Preserve the same character appearance, clothing, environment, lighting, camera language and complete audio continuity. No reset, no cut, no fade. The first second must hold the incoming framing, pose and action already in progress; only after that may the next beat develop. ";
+  const segments = [];
+  for (let i = 0; i < n; i++) {
+    const startT = Math.round(i * approx * 10) / 10;
+    const endT = Math.round(Math.min((i + 1) * approx, totalSeconds) * 10) / 10;
+    let actionFocus;
+    if (i === 0) actionFocus = "Opening sequence that establishes the scene, main subject, lighting and audio identity.";
+    else if (i === n - 1) actionFocus = "Closing sequence that brings the action to a satisfying resolution while holding the exact same visual and audio identity.";
+    else actionFocus = `Advance the action naturally in this time window (${startT}s–${endT}s), building directly on previous motion, energy and camera trajectory. Do not change lens or shot size at the join.`;
+    const prompt =
+`${continuity(i)}${rawPrompt}. ${actionFocus} Maintain continuous motion and consistent identity. End mid-action, not on a freeze. Continuous evolving sound design with no abrupt cuts. Keep the same camera move through the join and only evolve it after the first second.`;
+    segments.push({ index: i + 1, approx_seconds: Math.round(approx * 10) / 10, prompt: prompt.trim() });
+  }
+  return { enhanced_overall: rawPrompt, total_seconds: totalSeconds, target_clip_seconds: targetSegSeconds, segments };
+}
+
+async function callLLM(userPrompt, duration) {
+  const provider = $("provider").value;
+  const model = $("modelName").value;
+  const targetSeg = parseFloat($("segLen").value) || 5;
+  const userMsg = `raw_user_prompt: ${userPrompt}\ntotal_duration_seconds: ${duration}\ntarget_segment_seconds: ${targetSeg}`;
+  if (provider === "none") throw new Error("No provider selected");
+
+  if (provider === "ollama") {
+    const url = $("ollamaUrl").value.replace(/\/$/, "") + "/api/chat";
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: $("ollamaModel").value,
+        messages: [
+          { role: "system", content: PLANNER_SYSTEM },
+          { role: "user", content: userMsg }
+        ],
+        stream: false,
+        options: { temperature: 0.4 }
+      })
+    });
+    if (!res.ok) throw new Error(`Ollama error ${res.status}`);
+    const data = await res.json();
+    return data.message?.content || "";
+  }
+
+  if (provider === "xai" || provider === "openai") {
+    const base = provider === "xai" ? "https://api.x.ai/v1" : "https://api.openai.com/v1";
+    const res = await fetch(base + "/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${$("apiKey").value}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: PLANNER_SYSTEM },
+          { role: "user", content: userMsg }
+        ],
+        temperature: 0.4
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`${provider} ${res.status}: ${err.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    return data.choices[0].message.content;
+  }
+
+  if (provider === "anthropic") {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": $("apiKey").value,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model, max_tokens: 4096, system: PLANNER_SYSTEM,
+        messages: [{ role: "user", content: userMsg }]
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Anthropic ${res.status}: ${err.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    return data.content[0].text;
+  }
+}
+
+function ltxValidLength(seconds, fps = 24) {
+  const raw = Math.max(9, Math.round(seconds * fps) + 1);
+  const n = Math.ceil((raw - 1) / 8);
+  return 8 * n + 1;
+}
+
+class WorkflowBuilder {
+  constructor() {
+    this.nodes = [];
+    this.links = [];
+    this.nextId = 1;
+    this.nextLink = 1;
+  }
+  addNode(type, title, pos, opts = {}) {
+    const nid = this.nextId++;
+    const node = {
+      id: nid, type, pos,
+      size: opts.size || [300, 120],
+      flags: {}, order: 0, mode: 0,
+      inputs: opts.inputs || [],
+      outputs: opts.outputs || [],
+      title,
+      properties: opts.properties || { cnr_id: "comfy-core", ver: "0.5.1", "Node name for S&R": type }
+    };
+    if (opts.widgets_values) node.widgets_values = opts.widgets_values;
+    if (opts.widgets_values_named) node.widgets_values_named = opts.widgets_values_named;
+    this.nodes.push(node);
+    return nid;
+  }
+  link(fromNode, fromSlot, toNode, toSlot, type = "*") {
+    const lid = this.nextLink++;
+    this.links.push([lid, fromNode, fromSlot, toNode, toSlot, type]);
+    const src = this.nodes.find(n => n.id === fromNode);
+    if (src && fromSlot < src.outputs.length) {
+      if (!src.outputs[fromSlot].links) src.outputs[fromSlot].links = [];
+      src.outputs[fromSlot].links.push(lid);
+    }
+    const dst = this.nodes.find(n => n.id === toNode);
+    if (dst && toSlot < dst.inputs.length) dst.inputs[toSlot].link = lid;
+    return lid;
+  }
+}
+
+function coreProps(type, ver) {
+  return { cnr_id: "comfy-core", ver: ver || "0.5.1", "Node name for S&R": type };
+}
+
+function buildWorkflow(segments, config) {
+  const b = new WorkflowBuilder();
+  const N = segments.length;
+  const W = config.width, H = config.height, FPS = config.fps;
+  const lw = Math.max(64, Math.round(W / 2 / 32) * 32);
+  const lh = Math.max(64, Math.round(H / 2 / 32) * 32);
+  const joinSteps = Math.max(1, parseInt(config.joinSettleSteps) || 1);
+  const joinTrim = 8 * joinSteps;
+  const isT2V = config.mode === "t2v";
+  const fallbackSegLen = config.targetSegmentSeconds || 5;
+  const negative = config.negative || "blurry, watermark";
+  const vCfg = parseFloat(config.videoCfg) || 1;
+  const aCfg = parseFloat(config.audioCfg) || 1;
+
+  const unetId = b.addNode("UNETLoader", "UNET", [-2200, 100], {
+    size: [450, 120],
+    widgets_values: [config.unetName, "default"],
+    widgets_values_named: { unet_name: config.unetName, weight_dtype: "default" },
+    outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
+    properties: coreProps("UNETLoader", "0.29.0")
+  });
+  const clipId = b.addNode("CLIPLoader", "CLIP Gemma 4", [-2200, 300], {
+    size: [450, 120],
+    widgets_values: [config.clipName, "ltxv", "default"],
+    widgets_values_named: { clip_name: config.clipName, type: "ltxv", device: "default" },
+    outputs: [{ name: "CLIP", type: "CLIP", links: [] }],
+    properties: coreProps("CLIPLoader", "0.29.0")
+  });
+  const videoVaeId = b.addNode("VAELoader", "Video VAE", [-2200, 500], {
+    size: [450, 70],
+    widgets_values: [config.videoVae],
+    widgets_values_named: { vae_name: config.videoVae },
+    outputs: [{ name: "VAE", type: "VAE", links: [] }],
+    properties: coreProps("VAELoader", "0.29.0")
+  });
+  const audioVaeId = b.addNode("VAELoader", "Audio VAE", [-2200, 650], {
+    size: [450, 90],
+    widgets_values: [config.audioVae],
+    widgets_values_named: { vae_name: config.audioVae },
+    outputs: [{ name: "VAE", type: "VAE", links: [] }],
+    properties: coreProps("VAELoader", "0.29.0")
+  });
+  const upId = b.addNode("LatentUpscaleModelLoader", "Latent Upscaler x2", [-2200, 800], {
+    size: [450, 70],
+    widgets_values: [config.upscaleModel],
+    widgets_values_named: { model_name: config.upscaleModel },
+    outputs: [{ name: "LATENT_UPSCALE_MODEL", type: "LATENT_UPSCALE_MODEL", links: [] }],
+    properties: coreProps("LatentUpscaleModelLoader", "0.7.0")
+  });
+
+  const samplerId = b.addNode("KSamplerSelect", "Sampler", [-1700, 100], {
+    widgets_values: [config.samplerName],
+    widgets_values_named: { sampler_name: config.samplerName },
+    outputs: [{ name: "SAMPLER", type: "SAMPLER", links: [] }]
+  });
+  const sigLowId = b.addNode("ManualSigmas", "Sigmas Low-Res", [-1700, 280], {
+    size: [500, 100],
+    widgets_values: [config.sigmasLow],
+    widgets_values_named: { sigmas: config.sigmasLow },
+    outputs: [{ name: "SIGMAS", type: "SIGMAS", links: [] }]
+  });
+  const sigHighId = b.addNode("ManualSigmas", "Sigmas High-Res", [-1700, 430], {
+    size: [500, 100],
+    widgets_values: [config.sigmasHigh],
+    widgets_values_named: { sigmas: config.sigmasHigh },
+    outputs: [{ name: "SIGMAS", type: "SIGMAS", links: [] }]
+  });
+  let startImgId = null;
+  if (!isT2V) {
+    startImgId = b.addNode("LoadImage", "Start Image", [-2200, -250], {
+      size: [300, 320],
+      widgets_values: [config.startImage, "image"],
+      widgets_values_named: { image: config.startImage, upload: "image" },
+      outputs: [
+        { name: "IMAGE", type: "IMAGE", links: [] },
+        { name: "MASK", type: "MASK", links: [] }
+      ]
+    });
+  }
+
+  const lastFrameIds = [];
+  const segmentImageBatchIds = [];
+  const segmentAudioIds = [];
+  const colWidth = 900;
+  const baseX = -800;
+
+  for (let i = 0; i < N; i++) {
+    const x = baseX + i * colWidth;
+    const idx = i + 1;
+    const seg = segments[i];
+    const prompt = seg.prompt;
+    const approxS = seg.approx_seconds || fallbackSegLen;
+    const baseLength = ltxValidLength(approxS, FPS);
+    const length = i === 0 ? baseLength : baseLength + joinTrim;
+    const seed = (config.baseSeed || 614150394902077) + i * 9973;
+    const hasGuide = !(i === 0 && isT2V);
+    const guideImageNode = i === 0 ? startImgId : lastFrameIds[i - 1];
+
+    const noiseLow = b.addNode("RandomNoise", `Noise Low ${idx}`, [x, 80], {
+      widgets_values: [seed, "fixed"],
+      widgets_values_named: { noise_seed: seed, control_after_generate: "fixed" },
+      outputs: [{ name: "NOISE", type: "NOISE", links: [] }]
+    });
+    const noiseHigh = b.addNode("RandomNoise", `Noise High ${idx}`, [x, 220], {
+      widgets_values: [seed + 1, "fixed"],
+      widgets_values_named: { noise_seed: seed + 1, control_after_generate: "fixed" },
+      outputs: [{ name: "NOISE", type: "NOISE", links: [] }]
+    });
+
+    const posId = b.addNode("CLIPTextEncode", `Positive ${idx}`, [x, -420], {
+      size: [420, 280],
+      widgets_values: [prompt],
+      widgets_values_named: { text: prompt },
+      inputs: [
+        { name: "clip", type: "CLIP", link: null },
+        { name: "text", type: "STRING", widget: { name: "text" }, link: null }
+      ],
+      outputs: [{ name: "CONDITIONING", type: "CONDITIONING", links: [] }]
+    });
+    b.link(clipId, 0, posId, 0, "CLIP");
+
+    const negId = b.addNode("CLIPTextEncode", `Negative ${idx}`, [x, -90], {
+      size: [420, 140],
+      widgets_values: [negative],
+      widgets_values_named: { text: negative },
+      inputs: [
+        { name: "clip", type: "CLIP", link: null },
+        { name: "text", type: "STRING", widget: { name: "text" }, link: null }
+      ],
+      outputs: [{ name: "CONDITIONING", type: "CONDITIONING", links: [] }]
+    });
+    b.link(clipId, 0, negId, 0, "CLIP");
+
+    const condId = b.addNode("LTXVConditioning", `LTXV Cond ${idx}`, [x, 360], {
+      widgets_values: [FPS],
+      widgets_values_named: { frame_rate: FPS },
+      inputs: [
+        { name: "positive", type: "CONDITIONING", link: null },
+        { name: "negative", type: "CONDITIONING", link: null },
+        { name: "frame_rate", type: "FLOAT", widget: { name: "frame_rate" }, link: null }
+      ],
+      outputs: [
+        { name: "positive", type: "CONDITIONING", links: [] },
+        { name: "negative", type: "CONDITIONING", links: [] }
+      ]
+    });
+    b.link(posId, 0, condId, 0, "CONDITIONING");
+    b.link(negId, 0, condId, 1, "CONDITIONING");
+
+    const emptyVid = b.addNode("EmptyLTXVLatentVideo", `Empty Video ${idx}`, [x, 540], {
+      size: [300, 180],
+      widgets_values: [lw, lh, length, 1],
+      widgets_values_named: { width: lw, height: lh, length, batch_size: 1 },
+      outputs: [{ name: "LATENT", type: "LATENT", links: [] }]
+    });
+
+    const emptyAud = b.addNode("LTXVEmptyLatentAudio", `Empty Audio ${idx}`, [x, 760], {
+      size: [300, 160],
+      widgets_values: [length, FPS, 1],
+      widgets_values_named: { frames_number: length, frame_rate: FPS, batch_size: 1 },
+      inputs: [
+        { name: "audio_vae", type: "VAE", link: null },
+        { name: "frames_number", type: "INT", widget: { name: "frames_number" }, link: null },
+        { name: "frame_rate", type: "FLOAT,INT", widget: { name: "frame_rate" }, link: null }
+      ],
+      outputs: [{ name: "Latent", type: "LATENT", links: [] }]
+    });
+    b.link(audioVaeId, 0, emptyAud, 0, "VAE");
+
+    let videoLatentForConcat = emptyVid;
+    let posLow = condId, negLow = condId, posLowSlot = 0, negLowSlot = 1;
+
+    if (hasGuide && guideImageNode != null) {
+      const inplace = b.addNode("LTXVImgToVideoInplace", `Lock First Frame ${idx} (low-res)`, [x, 960], {
+        widgets_values: [1.0, false],
+        widgets_values_named: { strength: 1.0, bypass: false },
+        inputs: [
+          { name: "vae", type: "VAE", link: null },
+          { name: "image", type: "IMAGE", link: null },
+          { name: "latent", type: "LATENT", link: null },
+          { name: "strength", type: "FLOAT", widget: { name: "strength" }, link: null },
+          { name: "bypass", type: "BOOLEAN", widget: { name: "bypass" }, link: null }
+        ],
+        outputs: [{ name: "latent", type: "LATENT", links: [] }]
+      });
+      b.link(videoVaeId, 0, inplace, 0, "VAE");
+      b.link(guideImageNode, 0, inplace, 1, "IMAGE");
+      b.link(emptyVid, 0, inplace, 2, "LATENT");
+      videoLatentForConcat = inplace;
+    }
+
+    const concatLow = b.addNode("LTXVConcatAVLatent", `Concat AV Low ${idx}`, [x, 1160], {
+      inputs: [
+        { name: "video_latent", type: "LATENT", link: null },
+        { name: "audio_latent", type: "LATENT", link: null }
+      ],
+      outputs: [{ name: "latent", type: "LATENT", links: [] }]
+    });
+    b.link(videoLatentForConcat, 0, concatLow, 0, "LATENT");
+    b.link(emptyAud, 0, concatLow, 1, "LATENT");
+
+    const guiderLow = b.addNode("LTXVDualCFGGuider", `Guider Low ${idx}`, [x, 1320], {
+      widgets_values: [vCfg, aCfg],
+      widgets_values_named: { video_cfg: vCfg, audio_cfg: aCfg },
+      inputs: [
+        { name: "model", type: "MODEL", link: null },
+        { name: "positive", type: "CONDITIONING", link: null },
+        { name: "negative", type: "CONDITIONING", link: null },
+        { name: "video_cfg", type: "FLOAT", widget: { name: "video_cfg" }, link: null },
+        { name: "audio_cfg", type: "FLOAT", widget: { name: "audio_cfg" }, link: null }
+      ],
+      outputs: [{ name: "GUIDER", type: "GUIDER", links: [] }]
+    });
+    b.link(unetId, 0, guiderLow, 0, "MODEL");
+    b.link(posLow, posLowSlot, guiderLow, 1, "CONDITIONING");
+    b.link(negLow, negLowSlot, guiderLow, 2, "CONDITIONING");
+
+    const sampLow = b.addNode("SamplerCustomAdvanced", `Sample Low ${idx}`, [x, 1540], {
+      inputs: [
+        { name: "noise", type: "NOISE", link: null },
+        { name: "guider", type: "GUIDER", link: null },
+        { name: "sampler", type: "SAMPLER", link: null },
+        { name: "sigmas", type: "SIGMAS", link: null },
+        { name: "latent_image", type: "LATENT", link: null }
+      ],
+      outputs: [
+        { name: "output", type: "LATENT", links: [] },
+        { name: "denoised_output", type: "LATENT", links: [] }
+      ]
+    });
+    b.link(noiseLow, 0, sampLow, 0, "NOISE");
+    b.link(guiderLow, 0, sampLow, 1, "GUIDER");
+    b.link(samplerId, 0, sampLow, 2, "SAMPLER");
+    b.link(sigLowId, 0, sampLow, 3, "SIGMAS");
+    b.link(concatLow, 0, sampLow, 4, "LATENT");
+
+    const sepLow = b.addNode("LTXVSeparateAVLatent", `Separate Low ${idx}`, [x, 1760], {
+      inputs: [{ name: "av_latent", type: "LATENT", link: null }],
+      outputs: [
+        { name: "video_latent", type: "LATENT", links: [] },
+        { name: "audio_latent", type: "LATENT", links: [] }
+      ]
+    });
+    b.link(sampLow, 0, sepLow, 0, "LATENT");
+
+    const upLat = b.addNode("LTXVLatentUpsampler", `Upsample ${idx}`, [x, 1920], {
+      size: [330, 120],
+      inputs: [
+        { name: "samples", type: "LATENT", link: null },
+        { name: "upscale_model", type: "LATENT_UPSCALE_MODEL", link: null },
+        { name: "vae", type: "VAE", link: null }
+      ],
+      outputs: [{ name: "LATENT", type: "LATENT", links: [] }]
+    });
+    b.link(sepLow, 0, upLat, 0, "LATENT");
+    b.link(upId, 0, upLat, 1, "LATENT_UPSCALE_MODEL");
+    b.link(videoVaeId, 0, upLat, 2, "VAE");
+
+    let videoHigh = upLat;
+    let posHigh = condId, negHigh = condId, posHighSlot = 0, negHighSlot = 1;
+
+    if (hasGuide && guideImageNode != null) {
+      const guide = b.addNode("LTXVAddGuide", `AddGuide First Frame ${idx} (hi-res)`, [x, 2100], {
+        size: [340, 220],
+        widgets_values: [0, 1.0],
+        widgets_values_named: { frame_idx: 0, strength: 1.0 },
+        inputs: [
+          { name: "positive", type: "CONDITIONING", link: null },
+          { name: "negative", type: "CONDITIONING", link: null },
+          { name: "vae", type: "VAE", link: null },
+          { name: "latent", type: "LATENT", link: null },
+          { name: "image", type: "IMAGE", link: null },
+          { name: "frame_idx", type: "INT", widget: { name: "frame_idx" }, link: null },
+          { name: "strength", type: "FLOAT", widget: { name: "strength" }, link: null }
+        ],
+        outputs: [
+          { name: "positive", type: "CONDITIONING", links: [] },
+          { name: "negative", type: "CONDITIONING", links: [] },
+          { name: "latent", type: "LATENT", links: [] }
+        ]
+      });
+      b.link(condId, 0, guide, 0, "CONDITIONING");
+      b.link(condId, 1, guide, 1, "CONDITIONING");
+      b.link(videoVaeId, 0, guide, 2, "VAE");
+      b.link(upLat, 0, guide, 3, "LATENT");
+      b.link(guideImageNode, 0, guide, 4, "IMAGE");
+      videoHigh = guide;
+      posHigh = guide; negHigh = guide; posHighSlot = 0; negHighSlot = 1;
+    }
+
+    const concatHigh = b.addNode("LTXVConcatAVLatent", `Concat AV High ${idx}`, [x, 2380], {
+      inputs: [
+        { name: "video_latent", type: "LATENT", link: null },
+        { name: "audio_latent", type: "LATENT", link: null }
+      ],
+      outputs: [{ name: "latent", type: "LATENT", links: [] }]
+    });
+    b.link(videoHigh, hasGuide && guideImageNode != null ? 2 : 0, concatHigh, 0, "LATENT");
+    b.link(sepLow, 1, concatHigh, 1, "LATENT");
+
+    const guiderHigh = b.addNode("LTXVDualCFGGuider", `Guider High ${idx}`, [x, 2540], {
+      widgets_values: [vCfg, aCfg],
+      widgets_values_named: { video_cfg: vCfg, audio_cfg: aCfg },
+      inputs: [
+        { name: "model", type: "MODEL", link: null },
+        { name: "positive", type: "CONDITIONING", link: null },
+        { name: "negative", type: "CONDITIONING", link: null },
+        { name: "video_cfg", type: "FLOAT", widget: { name: "video_cfg" }, link: null },
+        { name: "audio_cfg", type: "FLOAT", widget: { name: "audio_cfg" }, link: null }
+      ],
+      outputs: [{ name: "GUIDER", type: "GUIDER", links: [] }]
+    });
+    b.link(unetId, 0, guiderHigh, 0, "MODEL");
+    b.link(posHigh, posHighSlot, guiderHigh, 1, "CONDITIONING");
+    b.link(negHigh, negHighSlot, guiderHigh, 2, "CONDITIONING");
+
+    const sampHigh = b.addNode("SamplerCustomAdvanced", `Sample High ${idx}`, [x, 2760], {
+      inputs: [
+        { name: "noise", type: "NOISE", link: null },
+        { name: "guider", type: "GUIDER", link: null },
+        { name: "sampler", type: "SAMPLER", link: null },
+        { name: "sigmas", type: "SIGMAS", link: null },
+        { name: "latent_image", type: "LATENT", link: null }
+      ],
+      outputs: [
+        { name: "output", type: "LATENT", links: [] },
+        { name: "denoised_output", type: "LATENT", links: [] }
+      ]
+    });
+    b.link(noiseHigh, 0, sampHigh, 0, "NOISE");
+    b.link(guiderHigh, 0, sampHigh, 1, "GUIDER");
+    b.link(samplerId, 0, sampHigh, 2, "SAMPLER");
+    b.link(sigHighId, 0, sampHigh, 3, "SIGMAS");
+    b.link(concatHigh, 0, sampHigh, 4, "LATENT");
+
+    const sepHigh = b.addNode("LTXVSeparateAVLatent", `Separate High ${idx}`, [x, 2980], {
+      inputs: [{ name: "av_latent", type: "LATENT", link: null }],
+      outputs: [
+        { name: "video_latent", type: "LATENT", links: [] },
+        { name: "audio_latent", type: "LATENT", links: [] }
+      ]
+    });
+    b.link(sampHigh, 0, sepHigh, 0, "LATENT");
+
+    const vdec = b.addNode("VAEDecodeTiled", `Video Decode ${idx}`, [x, 3140], {
+      size: [280, 200],
+      widgets_values: [768, 64, 4096, 32],
+      widgets_values_named: { tile_size: 768, overlap: 64, temporal_size: 4096, temporal_overlap: 32 },
+      inputs: [
+        { name: "samples", type: "LATENT", link: null },
+        { name: "vae", type: "VAE", link: null },
+        { name: "tile_size", type: "INT", widget: { name: "tile_size" }, link: null },
+        { name: "overlap", type: "INT", widget: { name: "overlap" }, link: null },
+        { name: "temporal_size", type: "INT", widget: { name: "temporal_size" }, link: null },
+        { name: "temporal_overlap", type: "INT", widget: { name: "temporal_overlap" }, link: null }
+      ],
+      outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+    });
+    b.link(sepHigh, 0, vdec, 0, "LATENT");
+    b.link(videoVaeId, 0, vdec, 1, "VAE");
+
+    const adec = b.addNode("LTXVAudioVAEDecode", `Audio Decode ${idx}`, [x, 3380], {
+      inputs: [
+        { name: "samples", type: "LATENT", link: null },
+        { name: "audio_vae", type: "VAE", link: null }
+      ],
+      outputs: [{ name: "Audio", type: "AUDIO", links: [] }]
+    });
+    b.link(sepHigh, 1, adec, 0, "LATENT");
+    b.link(audioVaeId, 0, adec, 1, "VAE");
+
+    const createId = b.addNode("CreateVideo", `Create Video ${idx}`, [x, 3540], {
+      widgets_values: [FPS, 8],
+      widgets_values_named: { fps: FPS, bit_depth: 8 },
+      inputs: [
+        { name: "images", type: "IMAGE", link: null },
+        { name: "audio", shape: 7, type: "AUDIO", link: null }
+      ],
+      outputs: [{ name: "VIDEO", type: "VIDEO", links: [] }]
+    });
+    b.link(vdec, 0, createId, 0, "IMAGE");
+    b.link(adec, 0, createId, 1, "AUDIO");
+
+    const compId = b.addNode("GetVideoComponents", `Segment ${idx} Components`, [x, 3720], {
+      inputs: [{ name: "video", type: "VIDEO", link: null }],
+      outputs: [
+        { name: "images", type: "IMAGE", links: [] },
+        { name: "audio", type: "AUDIO", links: [] },
+        { name: "fps", type: "FLOAT", links: [] },
+        { name: "bit_depth", type: "INT", links: [] }
+      ]
+    });
+    b.link(createId, 0, compId, 0, "VIDEO");
+
+    const lastId = b.addNode("ImageFromBatch", `Segment ${idx} Last Frame`, [x, 3880], {
+      widgets_values: [-1, 1],
+      widgets_values_named: { batch_index: -1, length: 1 },
+      inputs: [{ name: "image", type: "IMAGE", link: null }],
+      outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+    });
+    b.link(compId, 0, lastId, 0, "IMAGE");
+    lastFrameIds.push(lastId);
+
+    if (i === 0) {
+      segmentImageBatchIds.push(compId);
+      segmentAudioIds.push(compId);
+    } else {
+      const keepLen = Math.max(1, length - joinTrim);
+      const trimId = b.addNode("ImageFromBatch", `Trim Seg ${idx} settle ${joinTrim}f`, [x, 4040], {
+        size: [400, 90],
+        widgets_values: [joinTrim, keepLen],
+        widgets_values_named: { batch_index: joinTrim, length: keepLen },
+        inputs: [
+          { name: "image", type: "IMAGE", link: null },
+          { name: "length", type: "INT", widget: { name: "length" }, link: null }
+        ],
+        outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+      });
+      b.link(compId, 0, trimId, 0, "IMAGE");
+
+      const remuxId = b.addNode("CreateVideo", `Remux Seg ${idx} after settle`, [x, 4180], {
+        widgets_values: [FPS, 8],
+        widgets_values_named: { fps: FPS, bit_depth: 8 },
+        inputs: [
+          { name: "images", type: "IMAGE", link: null },
+          { name: "audio", shape: 7, type: "AUDIO", link: null }
+        ],
+        outputs: [{ name: "VIDEO", type: "VIDEO", links: [] }]
+      });
+      b.link(trimId, 0, remuxId, 0, "IMAGE");
+      b.link(compId, 1, remuxId, 1, "AUDIO");
+
+      const remuxCompId = b.addNode("GetVideoComponents", `Seg ${idx} After Settle`, [x, 4320], {
+        inputs: [{ name: "video", type: "VIDEO", link: null }],
+        outputs: [
+          { name: "images", type: "IMAGE", links: [] },
+          { name: "audio", type: "AUDIO", links: [] },
+          { name: "fps", type: "FLOAT", links: [] },
+          { name: "bit_depth", type: "INT", links: [] }
+        ]
+      });
+      b.link(remuxId, 0, remuxCompId, 0, "VIDEO");
+      segmentImageBatchIds.push(remuxCompId);
+      segmentAudioIds.push(remuxCompId);
+    }
+
+    const saveSegId = b.addNode("SaveVideo", `Save Segment ${idx}`, [x, 4480], {
+      size: [400, 200],
+      widgets_values: [`video/LTX_2.5_Long_seg${String(idx).padStart(2, "0")}`, "auto", "auto"],
+      widgets_values_named: {
+        filename_prefix: `video/LTX_2.5_Long_seg${String(idx).padStart(2, "0")}`,
+        format: "auto", codec: "auto"
+      },
+      inputs: [{ name: "video", type: "VIDEO", link: null }],
+      outputs: [
+        { name: "video_url", type: "VIDEO", links: null },
+        { name: "video", type: "VIDEO", links: null }
+      ]
+    });
+    b.link(createId, 0, saveSegId, 0, "VIDEO");
+  }
+
+  const joinX = baseX + N * colWidth + 100;
+  let prevBatch = null;
+  for (let i = 0; i < N; i++) {
+    if (i === 0) { prevBatch = segmentImageBatchIds[0]; continue; }
+    const batchId = b.addNode("ImageBatch", `Join Video 1..${i + 1}`, [joinX, 400 + (i - 1) * 80], {
+      inputs: [
+        { name: "image1", type: "IMAGE", link: null },
+        { name: "image2", type: "IMAGE", link: null }
+      ],
+      outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+    });
+    if (i === 1) b.link(segmentImageBatchIds[0], 0, batchId, 0, "IMAGE");
+    else b.link(prevBatch, 0, batchId, 0, "IMAGE");
+    b.link(segmentImageBatchIds[i], 0, batchId, 1, "IMAGE");
+    prevBatch = batchId;
+  }
+  const finalImages = N > 1 ? prevBatch : segmentImageBatchIds[0];
+
+  let prevAudio = null;
+  for (let i = 0; i < N; i++) {
+    if (i === 0) { prevAudio = segmentAudioIds[0]; continue; }
+    const concatId = b.addNode("AudioConcat", `Join Audio 1..${i + 1}`, [joinX, 900 + (i - 1) * 80], {
+      widgets_values: ["after"],
+      widgets_values_named: { direction: "after" },
+      inputs: [
+        { name: "audio1", type: "AUDIO", link: null },
+        { name: "audio2", type: "AUDIO", link: null }
+      ],
+      outputs: [{ name: "AUDIO", type: "AUDIO", links: [] }]
+    });
+    if (i === 1) b.link(segmentAudioIds[0], 1, concatId, 0, "AUDIO");
+    else b.link(prevAudio, 0, concatId, 0, "AUDIO");
+    b.link(segmentAudioIds[i], 1, concatId, 1, "AUDIO");
+    prevAudio = concatId;
+  }
+  const finalAudio = N > 1 ? prevAudio : segmentAudioIds[0];
+
+  const finalCreate = b.addNode("CreateVideo", "Create Final Long Video", [joinX + 400, 700], {
+    widgets_values: [FPS, 8],
+    widgets_values_named: { fps: FPS, bit_depth: 8 },
+    inputs: [
+      { name: "images", type: "IMAGE", link: null },
+      { name: "audio", shape: 7, type: "AUDIO", link: null },
+      { name: "fps", type: "FLOAT", widget: { name: "fps" }, link: null },
+      { name: "bit_depth", shape: 7, type: "INT", widget: { name: "bit_depth" }, link: null }
+    ],
+    outputs: [{ name: "VIDEO", type: "VIDEO", links: [] }]
+  });
+  b.link(finalImages, 0, finalCreate, 0, "IMAGE");
+  b.link(finalAudio, N > 1 ? 0 : 1, finalCreate, 1, "AUDIO");
+  b.link(segmentAudioIds[0], 2, finalCreate, 2, "FLOAT");
+  b.link(segmentAudioIds[0], 3, finalCreate, 3, "INT");
+
+  b.addNode("SaveVideo", "Save Final Long Video", [joinX + 400, 900], {
+    size: [500, 300],
+    widgets_values: ["video/LTX_2.5_Long", "auto", "auto"],
+    widgets_values_named: { filename_prefix: "video/LTX_2.5_Long", format: "auto", codec: "auto" },
+    inputs: [{ name: "video", type: "VIDEO", link: null }],
+    outputs: [
+      { name: "video_url", type: "VIDEO", links: null },
+      { name: "video", type: "VIDEO", links: null }
+    ]
+  });
+  const finalSave = b.nodes[b.nodes.length - 1].id;
+  b.link(finalCreate, 0, finalSave, 0, "VIDEO");
+
+  b.nodes.forEach((n, i) => n.order = i);
+
+  return {
+    id: `ltx25-long-dynamic-${N}x-${isT2V ? "t2v" : "i2v"}`,
+    revision: 0,
+    last_node_id: b.nextId - 1,
+    last_link_id: b.nextLink - 1,
+    nodes: b.nodes,
+    links: b.links,
+    groups: [],
+    config: {},
+    extra: { ds: { scale: 0.35, offset: [0, 0] }, frontendVersion: "1.48.6" },
+    version: 0.4
+  };
+}
+
+function showStatus(msg, type = "info") {
+  const el = $("status");
+  el.textContent = msg;
+  el.className = "status " + type;
+}
+
+$("btnPlan").addEventListener("click", async () => {
+  const prompt = $("userPrompt").value.trim();
+  const duration = parseFloat($("duration").value) || 30;
+  const segLen = parseFloat($("segLen").value) || 5;
+  const provider = $("provider").value;
+  if (!prompt) return showStatus("Enter a prompt first", "error");
+
+  if (provider === "none") {
+    showStatus("Generating local continuity-aware segments…", "info");
+    try {
+      const plan = generateLocalSegments(prompt, duration, segLen);
+      $("segmentsJson").value = JSON.stringify(plan, null, 2);
+      showStatus(`Created ${plan.segments.length} segments (~${segLen}s each) with continuity language for LTX last-frame joins`, "success");
+    } catch (e) {
+      showStatus("Local generation error: " + e.message, "error");
+    }
+    return;
+  }
+
+  $("btnPlan").disabled = true;
+  showStatus("Calling LLM…", "info");
+  try {
+    let text = await callLLM(prompt, duration);
+    text = text.trim();
+    if (text.startsWith("```")) text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    const plan = JSON.parse(text);
+    if (!plan.segments) throw new Error("Response missing segments");
+    $("segmentsJson").value = JSON.stringify(plan, null, 2);
+    showStatus(`Received ${plan.segments.length} segments (target ~${segLen}s each)`, "success");
+  } catch (e) {
+    showStatus("Error: " + e.message, "error");
+  } finally {
+    $("btnPlan").disabled = false;
+  }
+});
+
+$("btnGenerate").addEventListener("click", () => {
+  let plan;
+  try { plan = JSON.parse($("segmentsJson").value); }
+  catch (e) { return showStatus("Invalid JSON in segments editor", "error"); }
+  if (!plan.segments || !plan.segments.length) return showStatus("No segments found", "error");
+
+  const mode = $("genMode").value;
+  if (mode === "i2v" && !$("startImage").value.trim()) {
+    return showStatus("Start image filename is required in I2V mode", "error");
+  }
+
+  const config = {
+    mode,
+    width: parseInt($("width").value) || 1280,
+    height: parseInt($("height").value) || 720,
+    fps: parseInt($("fps").value) || 24,
+    startImage: $("startImage").value || "start_frame.png",
+    unetName: $("unetName").value,
+    clipName: $("clipName").value,
+    videoVae: $("videoVae").value,
+    audioVae: $("audioVae").value,
+    upscaleModel: $("upscaleModel").value,
+    samplerName: $("samplerName").value || "euler_ancestral",
+    sigmasLow: $("sigmasLow").value,
+    sigmasHigh: $("sigmasHigh").value,
+    videoCfg: $("videoCfg").value,
+    audioCfg: $("audioCfg").value,
+    negative: $("negative").value,
+    baseSeed: 614150394902077,
+    targetSegmentSeconds: parseFloat($("segLen").value) || 5,
+    joinSettleSteps: Math.max(1, parseInt($("joinSettle").value) || 1)
+  };
+
+  showStatus("Building workflow…", "info");
+  const doc = buildWorkflow(plan.segments, config);
+  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `ltx25_long_${plan.segments.length}x_${mode}.json`;
+  a.click();
+  showStatus(`Downloaded workflow (${doc.last_node_id} nodes, ${doc.last_link_id} links) – LTX-2.5 ${mode.toUpperCase()} • last-frame chaining + settle trim ready`, "success");
+});
+
+$("btnDownloadSeg").addEventListener("click", () => {
+  try {
+    const plan = JSON.parse($("segmentsJson").value);
+    const blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "ltx_segments.json";
+    a.click();
+  } catch (e) {
+    showStatus("Invalid segments JSON", "error");
+  }
+});
+
+loadSettings();
+</script>
+</body>
+</html>
