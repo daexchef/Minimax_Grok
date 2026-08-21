@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Long Video Workflow Studio</title>
+<style>
+  :root {
+    --bg: #0c0e12; --panel: #161a22; --border: #2a3140; --text: #e8ecf4;
+    --muted: #9aa3b2; --accent: #7c9cff; --ok: #3ecf8e; --warn: #e0b35c; --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding: 22px; max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; }
+  .sub { color: var(--muted); margin: 4px 0 18px; font-size: 0.92rem; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tabs button { background: #1e2430; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  .tabs button.on { background: var(--accent); color: #0b1020; font-weight: 600; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+  .panel h2 { font-size: 1.02rem; color: var(--accent); margin-bottom: 12px; }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea { width: 100%; background: #10141c; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 11px; margin-bottom: 10px; font-size: 0.92rem; }
+  textarea { min-height: 90px; font-family: ui-monospace, Menlo, monospace; font-size: 0.84rem; resize: vertical; }
+  .row { display: flex; gap: 10px; } .row > * { flex: 1; }
+  @media (max-width: 720px) { .row { flex-direction: column; } }
+  .engines { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 820px) { .engines { grid-template-columns: 1fr; } }
+  .eng { border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer; background: #12161e; }
+  .eng.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .eng h3 { font-size: 0.95rem; margin-bottom: 4px; }
+  .eng p { font-size: 0.8rem; color: var(--muted); }
+  .badge { font-size: 0.7rem; padding: 1px 7px; border-radius: 99px; background: #243044; color: #9ab0ff; margin-left: 6px; }
+  .badge.best { background: #1a3328; color: #7ee0b0; }
+  .badge.warn { background: #332a14; color: #e0b35c; }
+  button.go { background: var(--accent); color: #0b1020; border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; }
+  button.sec { background: #2a3140; color: var(--text); border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .status { margin-top: 10px; padding: 10px 12px; border-radius: 8px; display: none; font-size: 0.88rem; }
+  .status.info { display: block; background: #1c2433; color: #a8c0ff; }
+  .status.success { display: block; background: #14332a; color: var(--ok); }
+  .status.error { display: block; background: #331c1c; color: var(--bad); }
+  .hint { font-size: 0.78rem; color: var(--muted); margin: -4px 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  code { background: #10141c; padding: 1px 5px; border-radius: 4px; font-size: 0.84em; }
+  a { color: #9ab8ff; }
+  .hidden { display: none; }
+  pre { background: #10141c; padding: 10px; border-radius: 8px; overflow: auto; font-size: 0.78rem; max-height: 240px; }
+</style>
+</head>
+<body>
+<h1>Long Video Workflow Studio</h1>
+<p class="sub">All-in-one ComfyUI JSON generator · MiniMax H3 + LTX-2.5 · Hugging Face planner + weight download script · based on Aug 2026 chaining research</p>
+
+<div class="tabs">
+  <button class="on" data-tab="engine">1. Engine</button>
+  <button data-tab="plan">2. Plan</button>
+  <button data-tab="models">3. Models / HF</button>
+  <button data-tab="research">Research</button>
+</div>
+
+<div id="tab-engine">
+  <div class="panel">
+    <h2>Who is chaining long video well</h2>
+    <p class="hint">Last-frame lock is native but freezes velocity. The packs that actually continue motion + audio slice the previous clip’s <strong>latent tail</strong>, not a still.</p>
+    <div class="engines" id="engineGrid"></div>
+  </div>
+  <div class="panel">
+    <h2>Clip settings</h2>
+    <div class="row">
+      <div><label>Total duration (s)</label><input type="number" id="duration" value="40"></div>
+      <div><label>Target clip (s)</label><input type="number" id="segLen" value="10"></div>
+      <div><label>Steps</label><input type="number" id="steps" value="20"></div>
+    </div>
+    <div class="row" id="i2vRow">
+      <div><label>Start image (ComfyUI input/)</label><input id="startImage" value="z-image-turbo_00030_.png"></div>
+      <div><label>Width</label><input type="number" id="width" value="768"></div>
+      <div><label>Height</label><input type="number" id="height" value="1344"></div>
+    </div>
+    <p class="hint" id="clipCalc"></p>
+    <div id="mcNote" class="hint hidden">Motion Context needs <code>ComfyUI-H3-Motion-Context</code> in custom_nodes. Graph is one DAG: clip N sampler latent → clip N+1 <code>context_latent</code>, then <code>H3 Motion Context Trim</code>.</div>
+  </div>
+</div>
+
+<div id="tab-plan" class="hidden">
+  <div class="panel">
+    <h2>Planner LLM</h2>
+    <div class="row">
+      <div>
+        <label>Provider</label>
+        <select id="provider">
+          <option value="none">None / local template (no API)</option>
+          <option value="hf">Hugging Face Inference (token)</option>
+          <option value="xai">Grok (xAI)</option>
+          <option value="openai">OpenAI</option>
+          <option value="ollama">Ollama</option>
+          <option value="webllm">In-browser WebLLM (downloads a tiny model)</option>
+        </select>
+      </div>
+      <div><label>Model</label><input id="modelName" value="Qwen/Qwen2.5-32B-Instruct"></div>
+    </div>
+    <div id="keyGroup">
+      <label>API / HF token (browser localStorage only)</label>
+      <input type="password" id="apiKey" placeholder="hf_... / xai-... / sk-...">
+    </div>
+    <div id="ollamaGroup" class="hidden">
+      <label>Ollama URL</label><input id="ollamaUrl" value="http://localhost:11434">
+      <label>Ollama model</label><input id="ollamaModel" value="qwen2.5:32b">
+    </div>
+    <label>Idea</label>
+    <textarea id="userPrompt" placeholder="Young woman on a hoverboard, low rear tracking shot down a mountain trail..."></textarea>
+    <div class="actions">
+      <button class="go" id="btnPlan">Generate segments</button>
+      <button class="sec" id="btnWebllm">Load WebLLM (first time ~1–2 GB)</button>
+    </div>
+    <div id="planStatus" class="status"></div>
+  </div>
+  <div class="panel">
+    <h2>Segments JSON</h2>
+    <textarea id="segmentsJson" style="min-height:200px"></textarea>
+    <div class="actions">
+      <button class="go" id="btnGenerate">Download ComfyUI workflow JSON</button>
+      <button class="sec" id="btnSeg">Download segments.json</button>
+    </div>
+    <div id="genStatus" class="status"></div>
+  </div>
+</div>
+
+<div id="tab-models" class="hidden">
+  <div class="panel">
+    <h2>Weights this engine needs</h2>
+    <p class="hint">A browser page should not stream 15 GB UNET files into RAM. Use your HF token with <code>huggingface-cli</code> (script below), or open the resolve URL. HF Inference is for <em>planning text</em>, not for sampling video.</p>
+    <div class="row">
+      <div><label>HF token for Hub downloads</label><input type="password" id="hfHubToken" placeholder="hf_..."></div>
+      <div><label>ComfyUI models root</label><input id="comfyRoot" value="D:\ComfyUI\ComfyUI\models"></div>
+    </div>
+    <div id="modelTable"></div>
+    <div class="actions" style="margin-top:10px">
+      <button class="sec" id="btnPs1">Download huggingface-cli script</button>
+      <button class="sec" id="btnCurl">Copy curl list</button>
+    </div>
+    <pre id="dlPreview"></pre>
+  </div>
+</div>
+
+<div id="tab-research" class="hidden">
+  <div class="panel">
+    <h2>Findings (Aug 2026)</h2>
+    <table>
+      <tr><th>Method</th><th>Seam quality</th><th>Cost</th></tr>
+      <tr><td><a href="https://github.com/NikoDemon80/ComfyUI-H3-Motion-Context">H3 Motion Context</a> v0.2 + ethanfel R2V fork</td><td>Best: latent tail 22f + 1s audio, no VAE round-trip</td><td>Custom node; 20 steps recommended</td></tr>
+      <tr><td><a href="https://github.com/tritant/ComfyUI_MiniMax_H3_Extender">H3 Extender</a></td><td>Same family + disk cache</td><td>Custom node</td></tr>
+      <tr><td>Stock I2V last-frame, ~10 s, 20 steps, trim 1 frame</td><td>Best <em>without</em> extra nodes (your Fixaaaaaaa graph)</td><td>Slow; still a velocity reset</td></tr>
+      <tr><td>LTX-2.5 AddGuide + 8n+1 prefix</td><td>Strong; LTX was built for interior guides</td><td>Fast, lower VRAM</td></tr>
+      <tr><td>R2V last 2 s as ref_video</td><td>Identity help; audio often a “cover band”</td><td>Native</td></tr>
+      <tr><td>WAN 2.2 last-frame continue</td><td>Great single shots; chains still last-frame</td><td>WAN stack</td></tr>
+    </table>
+    <p class="hint" style="margin-top:12px">Motion Context authors: hold the previous framing ~2 s with a breath, not a freeze; don’t contradict the pinned people; H3 audio is 32 kHz; Turbo LoRA dulls chained audio. Full notes: <code>RESEARCH_seamless_long_video.md</code>.</p>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const ENGINES = {
+  "h3-smooth": {
+    name: "MiniMax H3 · I2V smooth (stock)",
+    badge: "best stock", badgeClass: "best",
+    blurb: "Cloned from the 4×10s I2V graph: start image, 20 steps, last-frame lock, trim 1 duplicate frame. Slow, no custom nodes.",
+    steps: 20, seg: 10, i2v: true, kind: "h3"
+  },
+  "h3-turbo": {
+    name: "MiniMax H3 · turbo last-frame",
+    badge: "fast",
+    blurb: "8-step euler + EasyCache/Sage. Same 1-frame trim as smooth. More joins if you use 4 s clips.",
+    steps: 8, seg: 5, i2v: false, kind: "h3"
+  },
+  "h3-motion": {
+    name: "MiniMax H3 · Motion Context",
+    badge: "best seams", badgeClass: "best",
+    blurb: "NikoDemon80 pack: pin last 22 latent frames + 24 audio frames. Needs ComfyUI-H3-Motion-Context installed.",
+    steps: 20, seg: 8, i2v: true, kind: "h3-mc"
+  },
+  "ltx25": {
+    name: "LTX-2.5 · two-stage + prefix",
+    badge: "fast / low VRAM",
+    blurb: "Official distilled two-stage graph. Later clips get an 8n+1 motion prefix via ImgToVideoInplace + AddGuide, then drop it.",
+    steps: 0, seg: 5, i2v: false, kind: "ltx"
+  }
+};
+let currentEngine = "h3-smooth";
+let webllmEngine = null;
+
+const MODELS = {
+  h3: [
+    { dir: "diffusion_models", file: "minimax_h3_fl2va_pruned_int8_convrot.safetensors", repo: "Comfy-Org/MiniMax-H3" },
+    { dir: "text_encoders", file: "qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors", repo: "Comfy-Org/MiniMax-H3" },
+    { dir: "vae", file: "minimax_h3_video_vae_fp16.safetensors", repo: "Comfy-Org/MiniMax-H3" },
+    { dir: "vae", file: "minimax_h3_audio_vae_fp32.safetensors", repo: "Comfy-Org/MiniMax-H3" }
+  ],
+  ltx: [
+    { dir: "diffusion_models", file: "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors", repo: "Lightricks/LTX-2.5" },
+    { dir: "text_encoders", file: "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", repo: "Lightricks/LTX-2.5" },
+    { dir: "vae", file: "ltx-2.5-video-vae-bf16.safetensors", repo: "Lightricks/LTX-2.5" },
+    { dir: "vae", file: "ltx-2.5-audio-vae-bf16.safetensors", repo: "Lightricks/LTX-2.5" },
+    { dir: "latent_upscale_models", file: "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", repo: "Lightricks/LTX-2.5" }
+  ]
+};
+
+function hfUrl(repo, file) {
+  const folder = { diffusion_models: "diffusion_models", text_encoders: "text_encoders", vae: "vae", latent_upscale_models: "latent_upscale_models" };
+  // Comfy-Org packs often put files at repo root or under folder; resolve by filename
+  return `https://huggingface.co/${repo}/resolve/main/${file}`;
+}
+
+function renderEngines() {
+  $("engineGrid").innerHTML = Object.entries(ENGINES).map(([id, e]) => `
+    <div class="eng ${id===currentEngine?"on":""}" data-id="${id}">
+      <h3>${e.name} <span class="badge ${e.badgeClass||""}">${e.badge}</span></h3>
+      <p>${e.blurb}</p>
+    </div>`).join("");
+  document.querySelectorAll(".eng").forEach(el => el.onclick = () => {
+    currentEngine = el.dataset.id;
+    const e = ENGINES[currentEngine];
+    $("steps").value = e.steps || 20;
+    $("segLen").value = e.seg;
+    $("mcNote").classList.toggle("hidden", currentEngine !== "h3-motion");
+    $("i2vRow").classList.toggle("hidden", currentEngine === "ltx25" && !$("startImage").value);
+    renderEngines(); updateCalc(); renderModels();
+  });
+}
+function updateCalc() {
+  const tot = parseFloat($("duration").value)||40, clip = parseFloat($("segLen").value)||10;
+  const n = Math.max(1, Math.ceil(tot/clip));
+  $("clipCalc").textContent = `≈ ${n} clips × ${(tot/n).toFixed(1)} s · engine ${ENGINES[currentEngine].name}`;
+}
+$("duration").oninput = $("segLen").oninput = updateCalc;
+
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  ["engine","plan","models","research"].forEach(t => $(`tab-${t}`).classList.toggle("hidden", t !== b.dataset.tab));
+});
+
+$("provider").onchange = () => {
+  const p = $("provider").value;
+  $("keyGroup").style.display = (p==="none"||p==="ollama"||p==="webllm") ? "none" : "block";
+  $("ollamaGroup").classList.toggle("hidden", p!=="ollama");
+  if (p==="hf") $("modelName").value = "Qwen/Qwen2.5-32B-Instruct";
+  if (p==="xai") $("modelName").value = "grok-4";
+  if (p==="openai") $("modelName").value = "gpt-4o";
+  if (p==="webllm") $("modelName").value = "Phi-3-mini-4k-instruct-q4f16_1-MLC";
+};
+
+function renderModels() {
+  const kind = currentEngine.startsWith("ltx") ? "ltx" : "h3";
+  const rows = MODELS[kind];
+  $("modelTable").innerHTML = `<table><tr><th>Folder</th><th>File</th><th>Hub</th></tr>${
+    rows.map(r => `<tr><td><code>${r.dir}</code></td><td>${r.file}</td><td><a href="${hfUrl(r.repo,r.file)}" target="_blank">${r.repo}</a></td></tr>`).join("")
+  }</table>`;
+  const root = $("comfyRoot").value.replace(/\\/g,"/");
+  const tok = $("hfHubToken").value || $("apiKey").value;
+  const lines = rows.map(r => {
+    const dest = `${root}/${r.dir}`;
+    return `huggingface-cli download ${r.repo} ${r.file} --local-dir "${dest}" --local-dir-use-symlinks False`;
+  });
+  $("dlPreview").textContent = (tok ? `$env:HF_TOKEN="${tok.slice(0,6)}…"\n` : "") + lines.join("\n");
+}
+$("comfyRoot").oninput = $("hfHubToken").oninput = renderModels;
+
+$("btnPs1").onclick = () => {
+  const kind = currentEngine.startsWith("ltx") ? "ltx" : "h3";
+  const root = $("comfyRoot").value;
+  const tok = $("hfHubToken").value || $("apiKey").value;
+  let s = `# Hugging Face download for ${ENGINES[currentEngine].name}\n# pip install -U huggingface_hub\n`;
+  if (tok) s += `$env:HF_TOKEN = "${tok}"\n`;
+  MODELS[kind].forEach(r => {
+    s += `New-Item -ItemType Directory -Force -Path "${root}\\${r.dir}" | Out-Null\n`;
+    s += `huggingface-cli download ${r.repo} ${r.file} --local-dir "${root}\\${r.dir}" --local-dir-use-symlinks False\n`;
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([s], {type:"text/plain"}));
+  a.download = `hf_download_${kind}.ps1`;
+  a.click();
+};
+$("btnCurl").onclick = async () => {
+  await navigator.clipboard.writeText($("dlPreview").textContent);
+  alert("Copied.");
+};
+
+const PLANNER = `You plan sequential clips for long AI video. Keep ONE camera language across clips. Later clips continue incoming motion; do not cut lens at a join. End mid-action.
+Output ONLY JSON: {"enhanced_overall":"...","total_seconds":40,"segments":[{"index":1,"approx_seconds":10,"prompt":"..."}]}
+Non-first prompts MUST start with: Continue seamlessly from the supplied first frame / motion prefix. Preserve identity, wardrobe, lighting, camera, audio. No freeze, no reset, no cut.`;
+
+function localPlan(raw, total, clip) {
+  const n = Math.max(1, Math.ceil(total/clip));
+  const a = total/n;
+  const segs = [];
+  for (let i=0;i<n;i++) {
+    const cont = i===0 ? "" : "Continue seamlessly from the supplied first frame. Preserve the same character, clothing, environment, lighting, camera language, motion trajectory and audio. No freeze, no reset, no cut, no fade. ";
+    segs.push({ index:i+1, approx_seconds: Math.round(a*10)/10, prompt: `${cont}${raw}. ${i===0?"Establish scene and motion.": i===n-1?"Resolve without a freeze.":"Advance the same shot."} Keep camera language identical.` });
+  }
+  return { enhanced_overall: raw, total_seconds: total, segments: segs };
+}
+
+async function callLLM(raw, total, clip) {
+  const p = $("provider").value, model = $("modelName").value;
+  const user = `raw: ${raw}\ntotal_seconds: ${total}\ntarget_segment_seconds: ${clip}`;
+  if (p==="none") return JSON.stringify(localPlan(raw,total,clip),null,2);
+  if (p==="webllm") {
+    if (!webllmEngine) throw new Error("Click Load WebLLM first");
+    const out = await webllmEngine.chat.completions.create({
+      messages: [{role:"system", content: PLANNER},{role:"user", content: user}], temperature: 0.4
+    });
+    return out.choices[0].message.content;
+  }
+  if (p==="ollama") {
+    const res = await fetch($("ollamaUrl").value.replace(/\/$/,"")+"/api/chat", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ model: $("ollamaModel").value, messages:[{role:"system",content:PLANNER},{role:"user",content:user}], stream:false })
+    });
+    if (!res.ok) throw new Error("Ollama "+res.status);
+    return (await res.json()).message.content;
+  }
+  const headers = { "Content-Type":"application/json", Authorization: `Bearer ${$("apiKey").value}` };
+  let url = "https://api.openai.com/v1/chat/completions";
+  if (p==="xai") url = "https://api.x.ai/v1/chat/completions";
+  if (p==="hf") url = "https://router.huggingface.co/v1/chat/completions";
+  const res = await fetch(url, { method:"POST", headers, body: JSON.stringify({
+    model, messages:[{role:"system",content:PLANNER},{role:"user",content:user}], temperature:0.4, max_tokens: 4096
+  })});
+  if (!res.ok) throw new Error(p+" "+res.status+" "+(await res.text()).slice(0,240));
+  return (await res.json()).choices[0].message.content;
+}
+
+$("btnWebllm").onclick = async () => {
+  setStat("planStatus","Loading WebLLM (Phi-3 mini). First run downloads weights into the browser cache…","info");
+  try {
+    const { CreateMLCEngine } = await import("https://esm.run/@mlc-ai/web-llm");
+    webllmEngine = await CreateMLCEngine($("modelName").value || "Phi-3-mini-4k-instruct-q4f16_1-MLC", {
+      initProgressCallback: r => setStat("planStatus", r.text || "loading…", "info")
+    });
+    $("provider").value = "webllm";
+    setStat("planStatus","WebLLM ready. Generate segments.","success");
+  } catch (e) { setStat("planStatus", e.message, "error"); }
+};
+
+$("btnPlan").onclick = async () => {
+  const raw = $("userPrompt").value.trim();
+  if (!raw) return setStat("planStatus","Enter an idea","error");
+  const tot = parseFloat($("duration").value)||40, clip = parseFloat($("segLen").value)||10;
+  setStat("planStatus","Planning…","info");
+  try {
+    let t = await callLLM(raw, tot, clip);
+    t = t.trim().replace(/^```(?:json)?\n?/,"").replace(/\n?```$/,"");
+    const plan = JSON.parse(t);
+    if (!plan.segments) throw new Error("no segments");
+    $("segmentsJson").value = JSON.stringify(plan, null, 2);
+    setStat("planStatus", `${plan.segments.length} segments`, "success");
+  } catch (e) { setStat("planStatus", e.message, "error"); }
+};
+
+class WB {
+  constructor(){ this.nodes=[]; this.links=[]; this.nextId=1; this.nextLink=1; }
+  add(type, title, pos, o={}) {
+    const id=this.nextId++;
+    const n={ id, type, pos, size:o.size||[300,120], flags:{}, order:0, mode:0, inputs:o.inputs||[], outputs:o.outputs||[], title,
+      properties: o.properties||{ cnr_id:"comfy-core", ver:"0.33.0", "Node name for S&R": type } };
+    if (o.wv) n.widgets_values=o.wv;
+    if (o.wvn) n.widgets_values_named=o.wvn;
+    this.nodes.push(n); return id;
+  }
+  link(a,as,b,bs,t="*") {
+    const id=this.nextLink++;
+    this.links.push([id,a,as,b,bs,t]);
+    const src=this.nodes.find(n=>n.id===a); if (src && src.outputs[as]) { src.outputs[as].links=src.outputs[as].links||[]; src.outputs[as].links.push(id); }
+    const dst=this.nodes.find(n=>n.id===b); if (dst && dst.inputs[bs]) dst.inputs[bs].link=id;
+    return id;
+  }
+}
+function h3Snap(s,fps=24){ const n=Math.max(5,Math.round(s*fps)); return n+((5-(n%17))%17); }
+function ltxSnap(s,fps=24){ const raw=Math.max(9,Math.round(s*fps)+1); return 8*Math.ceil((raw-1)/8)+1; }
+
+function sharedH3(b, cfg) {
+  const unet=b.add("UNETLoader","UNET",[-2200,100],{ wv:[cfg.unet,"default"], outputs:[{name:"MODEL",type:"MODEL",links:[]}] });
+  const clip=b.add("CLIPLoader","CLIP",[-2200,300],{ size:[420,120], wv:[cfg.clip,"minimax","default"], outputs:[{name:"CLIP",type:"CLIP",links:[]}] });
+  const vvae=b.add("VAELoader","Video VAE",[-2200,500],{ wv:[cfg.vvae], outputs:[{name:"VAE",type:"VAE",links:[]}] });
+  const avae=b.add("VAELoader","Audio VAE",[-2200,700],{ wv:[cfg.avae], outputs:[{name:"VAE",type:"VAE",links:[]}] });
+  const easy=b.add("EasyCache","EasyCache",[-1700,-80],{ size:[320,140], wv:[0.3,0.2,0.9,false], inputs:[{name:"model",type:"MODEL",link:null}], outputs:[{name:"MODEL",type:"MODEL",links:[]}] });
+  b.link(unet,0,easy,0,"MODEL");
+  const sage=b.add("PathchSageAttentionKJ","SageAttention",[-1700,80],{ wv:["auto",false], inputs:[{name:"model",type:"MODEL",link:null}], outputs:[{name:"MODEL",type:"MODEL",links:[]}], properties:{ cnr_id:"comfyui-workflow-encrypt", ver:"1.0.0", "Node name for S&R":"PathchSageAttentionKJ" } });
+  b.link(easy,0,sage,0,"MODEL");
+  const samp=b.add("KSamplerSelect","Sampler",[-1700,250],{ wv:["euler"], outputs:[{name:"SAMPLER",type:"SAMPLER",links:[]}] });
+  const steps=b.add("PrimitiveInt","Steps",[-1700,-250],{ wv:[cfg.steps,"fixed"], outputs:[{name:"INT",type:"INT",links:[]}] });
+  let start=null;
+  if (cfg.startImage) start=b.add("LoadImage","Start Image",[-2200,-320],{ size:[300,300], wv:[cfg.startImage,"image"], outputs:[{name:"IMAGE",type:"IMAGE",links:[]},{name:"MASK",type:"MASK",links:[]}] });
+  return { unet, clip, vvae, avae, sage, samp, steps, start };
+}
+
+function joinAV(b, imgIds, audIds, N, joinX, fps, prefix) {
+  let pb=null, pa=null;
+  for (let i=0;i<N;i++){
+    if(i===0){ pb=imgIds[0]; pa=audIds[0]; continue; }
+    const bat=b.add("ImageBatch",`Join Video 1..${i+1}`,[joinX,400+(i-1)*80],{ inputs:[{name:"image1",type:"IMAGE",link:null},{name:"image2",type:"IMAGE",link:null}], outputs:[{name:"IMAGE",type:"IMAGE",links:[]}] });
+    b.link(i===1?imgIds[0]:pb,0,bat,0,"IMAGE"); b.link(imgIds[i],0,bat,1,"IMAGE"); pb=bat;
+    const ac=b.add("AudioConcat",`Join Audio 1..${i+1}`,[joinX,900+(i-1)*80],{ wv:["after"], inputs:[{name:"audio1",type:"AUDIO",link:null},{name:"audio2",type:"AUDIO",link:null}], outputs:[{name:"AUDIO",type:"AUDIO",links:[]}] });
+    if(i===1) b.link(audIds[0],1,ac,0,"AUDIO"); else b.link(pa,0,ac,0,"AUDIO");
+    b.link(audIds[i],1,ac,1,"AUDIO"); pa=ac;
+  }
+  const fi=N>1?pb:imgIds[0], fa=N>1?pa:audIds[0];
+  const cv=b.add("CreateVideo","Create Final",[joinX+380,700],{ wv:[fps,8], inputs:[{name:"images",type:"IMAGE",link:null},{name:"audio",shape:7,type:"AUDIO",link:null},{name:"fps",type:"FLOAT",widget:{name:"fps"},link:null},{name:"bit_depth",shape:7,type:"INT",widget:{name:"bit_depth"},link:null}], outputs:[{name:"VIDEO",type:"VIDEO",links:[]}] });
+  b.link(fi,0,cv,0,"IMAGE"); b.link(fa,N>1?0:1,cv,1,"AUDIO"); b.link(audIds[0],2,cv,2,"FLOAT"); b.link(audIds[0],3,cv,3,"INT");
+  const sv=b.add("SaveVideo","Save Final",[joinX+380,900],{ size:[420,160], wv:[prefix,"auto","auto"], inputs:[{name:"video",type:"VIDEO",link:null}], outputs:[{name:"video_url",type:"VIDEO",links:null},{name:"video",type:"VIDEO",links:null}] });
+  b.link(cv,0,sv,0,"VIDEO");
+}
+
+function buildH3LastFrame(segments, cfg, motion) {
+  const b=new WB(), N=segments.length, W=cfg.width, H=cfg.height, FPS=24, STEPS=cfg.steps;
+  const sh=sharedH3(b,cfg);
+  const last=[], imgIds=[], audIds=[], sampOut=[];
+  const col=780, base=-800;
+  for(let i=0;i<N;i++){
+    const x=base+i*col, idx=i+1, prompt=segments[i].prompt, length=h3Snap(segments[i].approx_seconds||cfg.seg, FPS);
+    const seed=(cfg.baseSeed||144012845932748)+i*9973;
+    const noise=b.add("RandomNoise",`Noise ${idx}`,[x,200],{ wv:[seed,"fixed"], outputs:[{name:"NOISE",type:"NOISE",links:[]}] });
+    const cond=b.add("MiniMaxH3ImageToVideo",`Segment ${idx} Conditioning`,[x,-280],{ size:[400,400], wv:[prompt,W,H,length],
+      inputs:[{name:"clip",type:"CLIP",link:null},{name:"vae",type:"VAE",link:null},{name:"first_frame",shape:7,type:"IMAGE",link:null},{name:"last_frame",shape:7,type:"IMAGE",link:null},{name:"width",type:"INT",widget:{name:"width"},link:null},{name:"height",type:"INT",widget:{name:"height"},link:null},{name:"length",type:"INT",widget:{name:"length"},link:null}],
+      outputs:[{name:"positive",type:"CONDITIONING",links:[]},{name:"LATENT",type:"LATENT",links:[]}] });
+    b.link(sh.clip,0,cond,0,"CLIP"); b.link(sh.vvae,0,cond,1,"VAE");
+    if(i===0 && sh.start) b.link(sh.start,0,cond,2,"IMAGE");
+    else if(i>0 && !motion && last[i-1]) b.link(last[i-1],0,cond,2,"IMAGE");
+
+    let posNode=cond, posSlot=0, trimSrc=null;
+    if(motion && i>0){
+      const mc=b.add("MiniMaxH3MotionContext",`H3 Motion Context ${idx}`,[x,50],{
+        wv:["22",24],
+        inputs:[
+          {name:"conditioning",type:"CONDITIONING",link:null},{name:"vae",type:"VAE",link:null},{name:"latent",type:"LATENT",link:null},
+          {name:"context_length",type:"COMBO",widget:{name:"context_length"},link:null},
+          {name:"audio_context_length",type:"INT",widget:{name:"audio_context_length"},link:null},
+          {name:"context_frames",shape:7,type:"IMAGE",link:null},
+          {name:"context_latent",shape:7,type:"LATENT",link:null}
+        ],
+        outputs:[{name:"conditioning",type:"CONDITIONING",links:[]},{name:"trim_frames",type:"INT",links:[]}]
+      });
+      b.link(cond,0,mc,0,"CONDITIONING"); b.link(sh.vvae,0,mc,1,"VAE"); b.link(cond,1,mc,2,"LATENT");
+      b.link(sampOut[i-1],0,mc,6,"LATENT");
+      posNode=mc; posSlot=0; trimSrc=mc;
+    }
+
+    const guider=b.add("BasicGuider",`Guider ${idx}`,[x,350],{ inputs:[{name:"model",type:"MODEL",link:null},{name:"conditioning",type:"CONDITIONING",link:null}], outputs:[{name:"GUIDER",type:"GUIDER",links:[]}] });
+    b.link(sh.sage,0,guider,0,"MODEL"); b.link(posNode,posSlot,guider,1,"CONDITIONING");
+    const sched=b.add("BasicScheduler",`Scheduler ${idx}`,[x,500],{ wv:["simple",STEPS,1], inputs:[{name:"model",type:"MODEL",link:null},{name:"steps",type:"INT",widget:{name:"steps"},link:null}], outputs:[{name:"SIGMAS",type:"SIGMAS",links:[]}] });
+    b.link(sh.sage,0,sched,0,"MODEL"); b.link(sh.steps,0,sched,1,"INT");
+    const sampler=b.add("SamplerCustomAdvanced",`Sampler ${idx}`,[x,650],{ inputs:[{name:"noise",type:"NOISE",link:null},{name:"guider",type:"GUIDER",link:null},{name:"sampler",type:"SAMPLER",link:null},{name:"sigmas",type:"SIGMAS",link:null},{name:"latent_image",type:"LATENT",link:null}], outputs:[{name:"output",type:"LATENT",links:[]},{name:"denoised_output",type:"LATENT",links:[]}] });
+    b.link(noise,0,sampler,0,"NOISE"); b.link(guider,0,sampler,1,"GUIDER"); b.link(sh.samp,0,sampler,2,"SAMPLER"); b.link(sched,0,sampler,3,"SIGMAS"); b.link(cond,1,sampler,4,"LATENT");
+    sampOut.push(sampler);
+    const vdec=b.add("VAEDecode",`Video Decode ${idx}`,[x,850],{ inputs:[{name:"samples",type:"LATENT",link:null},{name:"vae",type:"VAE",link:null}], outputs:[{name:"IMAGE",type:"IMAGE",links:[]}] });
+    b.link(sampler,0,vdec,0,"LATENT"); b.link(sh.vvae,0,vdec,1,"VAE");
+    const adec=b.add("VAEDecodeAudio",`Audio Decode ${idx}`,[x,1000],{ inputs:[{name:"samples",type:"LATENT",link:null},{name:"vae",type:"VAE",link:null}], outputs:[{name:"AUDIO",type:"AUDIO",links:[]}] });
+    b.link(sampler,0,adec,0,"LATENT"); b.link(sh.avae,0,adec,1,"VAE");
+    const create=b.add("CreateVideo",`Create Video ${idx}`,[x,1150],{ wv:[FPS,8], inputs:[{name:"images",type:"IMAGE",link:null},{name:"audio",shape:7,type:"AUDIO",link:null}], outputs:[{name:"VIDEO",type:"VIDEO",links:[]}] });
+    b.link(vdec,0,create,0,"IMAGE"); b.link(adec,0,create,1,"AUDIO");
+    const comp=b.add("GetVideoComponents",`Seg ${idx} Components`,[x,1300],{ inputs:[{name:"video",type:"VIDEO",link:null}], outputs:[{name:"images",type:"IMAGE",links:[]},{name:"audio",type:"AUDIO",links:[]},{name:"fps",type:"FLOAT",links:[]},{name:"bit_depth",type:"INT",links:[]}] });
+    b.link(create,0,comp,0,"VIDEO");
+    const lf=b.add("ImageFromBatch",`Seg ${idx} Last Frame`,[x,1450],{ wv:[-1,1], inputs:[{name:"image",type:"IMAGE",link:null}], outputs:[{name:"IMAGE",type:"IMAGE",links:[]}] });
+    b.link(comp,0,lf,0,"IMAGE"); last.push(lf);
+
+    if(i===0){ imgIds.push(comp); audIds.push(comp); }
+    else if(motion && trimSrc){
+      const tr=b.add("MiniMaxH3MotionContextTrim",`MC Trim ${idx}`,[x,1600],{
+        wv:[22, FPS, true],
+        inputs:[{name:"images",type:"IMAGE",link:null},{name:"trim_frames",type:"INT",widget:{name:"trim_frames"},link:null},{name:"audio",shape:7,type:"AUDIO",link:null},{name:"fps",type:"FLOAT",widget:{name:"fps"},link:null},{name:"match_tail",type:"BOOLEAN",widget:{name:"match_tail"},link:null}],
+        outputs:[{name:"images",type:"IMAGE",links:[]},{name:"audio",type:"AUDIO",links:[]}]
+      });
+      b.link(comp,0,tr,0,"IMAGE"); b.link(trimSrc,1,tr,1,"INT"); b.link(comp,1,tr,2,"AUDIO");
+      imgIds.push(tr); audIds.push(tr);
+    } else {
+      const tr=b.add("ImageFromBatch",`Trim Seg ${idx} dup first`,[x,1600],{ size:[380,80], wv:[1,length-1],
+        inputs:[{name:"image",type:"IMAGE",link:null},{name:"length",type:"INT",widget:{name:"length"},link:null}], outputs:[{name:"IMAGE",type:"IMAGE",links:[]}] });
+      b.link(comp,0,tr,0,"IMAGE"); imgIds.push(tr); audIds.push(comp);
+    }
+  }
+  joinAV(b,imgIds,audIds,N,base+N*col+80,FPS, motion?"video/MiniMax_H3_MC":"video/MiniMax_H3");
+  b.nodes.forEach((n,i)=>n.order=i);
+  return { id:`studio-${currentEngine}-${N}x`, revision:0, last_node_id:b.nextId-1, last_link_id:b.nextLink-1, nodes:b.nodes, links:b.links, groups:[], config:{}, extra:{ ds:{scale:0.4,offset:[0,0]} }, version:0.4 };
+}
+
+function buildLTX(segments, cfg) {
+  const b=new WB(), N=segments.length, W=cfg.width||1280, H=cfg.height||720, FPS=24;
+  const extra=8, overlap=9;
+  const lw=Math.max(64,Math.round(W/2/32)*32), lh=Math.max(64,Math.round(H/2/32)*32);
+  const unet=b.add("UNETLoader","UNET",[-2200,100],{ size:[450,120], wv:[cfg.unet,"default"], outputs:[{name:"MODEL",type:"MODEL",links:[]}] });
+  const clip=b.add("CLIPLoader","CLIP",[-2200,300],{ size:[450,120], wv:[cfg.clip,"ltxv","default"], outputs:[{name:"CLIP",type:"CLIP",links:[]}] });
+  const vvae=b.add("VAELoader","Video VAE",[-2200,500],{ wv:[cfg.vvae], outputs:[{name:"VAE",type:"VAE",links:[]}] });
+  const avae=b.add("VAELoader","Audio VAE",[-2200,650],{ wv:[cfg.avae], outputs:[{name:"VAE",type:"VAE",links:[]}] });
+  const up=b.add("LatentUpscaleModelLoader","Upscaler x2",[-2200,800],{ wv:[cfg.up], outputs:[{name:"LATENT_UPSCALE_MODEL",type:"LATENT_UPSCALE_MODEL",links:[]}] });
+  const samp=b.add("KSamplerSelect","Sampler",[-1700,100],{ wv:["euler_ancestral"], outputs:[{name:"SAMPLER",type:"SAMPLER",links:[]}] });
+  const sigL=b.add("ManualSigmas","Sigmas Low",[-1700,250],{ wv:["1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"], outputs:[{name:"SIGMAS",type:"SIGMAS",links:[]}] });
+  const sigH=b.add("ManualSigmas","Sigmas High",[-1700,400],{ wv:["0.85, 0.7250, 0.4219, 0.0"], outputs:[{name:"SIGMAS",type:"SIGMAS",links:[]}] });
+  let start=null;
+  if(cfg.startImage) start=b.add("LoadImage","Start Image",[-2200,-280],{ wv:[cfg.startImage,"image"], outputs:[{name:"IMAGE",type:"IMAGE",links:[]},{name:"MASK",type:"MASK",links:[]}] });
+  const prefixIds=[], imgIds=[], audIds=[];
+  const col=900, base=-800;
+  for(let i=0;i<N;i++){
+    const x=base+i*col, idx=i+1, prompt=segments[i].prompt;
+    const baseLen=ltxSnap(segments[i].approx_seconds||cfg.seg,FPS);
+    const length=i===0?baseLen:baseLen+extra;
+    const seed=(cfg.baseSeed||614150394902077)+i*9973;
+    const has= !(i===0 && !start);
+    const guide= i===0? start : prefixIds[i-1];
+    const nL=b.add("RandomNoise",`Noise L ${idx}`,[x,80],{ wv:[seed,"fixed"], outputs:[{name:"NOISE",type:"NOISE",links:[]}] });
+    const nH=b.add("RandomNoise",`Noise H ${idx}`,[x,200],{ wv:[seed+1,"fixed"], outputs:[{name:"NOISE",type:"NOISE",links:[]}] });
+    const pos=b.add("CLIPTextEncode",`Pos ${idx}`,[x,-400],{ size:[400,220], wv:[prompt], inputs:[{name:"clip",type:"CLIP",link:null}], outputs:[{name:"CONDITIONING",type:"CONDITIONING",links:[]}] });
+    b.link(clip,0,pos,0,"CLIP");
+    const neg=b.add("CLIPTextEncode",`Neg ${idx}`,[x,-140],{ size:[400,120], wv:["pc game, cartoon, blurry, watermark"], inputs:[{name:"clip",type:"CLIP",link:null}], outputs:[{name:"CONDITIONING",type:"CONDITIONING",links:[]}] });
+    b.link(clip,0,neg,0,"CLIP");
+    const ltxc=b.add("LTXVConditioning",`Cond ${idx}`,[x,340],{ wv:[FPS], inputs:[{name:"positive",type:"CONDITIONING",link:null},{name:"negative",type:"CONDITIONING",link:null}], outputs:[{name:"positive",type:"CONDITIONING",links:[]},{name:"negative",type:"CONDITIONING",links:[]}] });
+    b.link(pos,0,ltxc,0,"CONDITIONING"); b.link(neg,0,ltxc,1,"CONDITIONING");
+    const empty=b.add("EmptyLTXVLatentVideo",`Empty V ${idx}`,[x,500],{ wv:[lw,lh,length,1], outputs:[{name:"LATENT",type:"LATENT",links:[]}] });
+    const emptyA=b.add("LTXVEmptyLatentAudio",`Empty A ${idx}`,[x,700],{ wv:[length,FPS,1], inputs:[{name:"audio_vae",type:"VAE",link:null}], outputs:[{name:"Latent",type:"LATENT",links:[]}] });
+    b.link(avae,0,emptyA,0,"VAE");
+    let vlat=empty;
+    if(has && guide){
+      const ip=b.add("LTXVImgToVideoInplace",`Prefix low ${idx}`,[x,900],{ wv:[1.0,false], inputs:[{name:"vae",type:"VAE",link:null},{name:"image",type:"IMAGE",link:null},{name:"latent",type:"LATENT",link:null}], outputs:[{name:"latent",type:"LATENT",links:[]}] });
+      b.link(vvae,0,ip,0,"VAE"); b.link(guide,0,ip,1,"IMAGE"); b.link(empty,0,ip,2,"LATENT"); vlat=ip;
+    }
+    const catL=b.add("LTXVConcatAVLatent",`Cat low ${idx}`,[x,1080],{ inputs:[{name:"video_latent",type:"LATENT",link:null},{name:"audio_latent",type:"LATENT",link:null}], outputs:[{name:"latent",type:"LATENT",links:[]}] });
+    b.link(vlat,0,catL,0,"LATENT"); b.link(emptyA,0,catL,1,"LATENT");
+    const gL=b.add("LTXVDualCFGGuider",`Guider L ${idx}`,[x,1240],{ wv:[1,1], inputs:[{name:"model",type:"MODEL",link:null},{name:"positive",type:"CONDITIONING",link:null},{name:"negative",type:"CONDITIONING",link:null}], outputs:[{name:"GUIDER",type:"GUIDER",links:[]}] });
+    b.link(unet,0,gL,0,"MODEL"); b.link(ltxc,0,gL,1,"CONDITIONING"); b.link(ltxc,1,gL,2,"CONDITIONING");
+    const sL=b.add("SamplerCustomAdvanced",`Sample L ${idx}`,[x,1420],{ inputs:[{name:"noise",type:"NOISE",link:null},{name:"guider",type:"GUIDER",link:null},{name:"sampler",type:"SAMPLER",link:null},{name:"sigmas",type:"SIGMAS",link:null},{name:"latent_image",type:"LATENT",link:null}], outputs:[{name:"output",type:"LATENT",links:[]},{name:"denoised_output",type:"LATENT",links:[]}] });
+    b.link(nL,0,sL,0,"NOISE"); b.link(gL,0,sL,1,"GUIDER"); b.link(samp,0,sL,2,"SAMPLER"); b.link(sigL,0,sL,3,"SIGMAS"); b.link(catL,0,sL,4,"LATENT");
+    const sepL=b.add("LTXVSeparateAVLatent",`Sep L ${idx}`,[x,1620],{ inputs:[{name:"av_latent",type:"LATENT",link:null}], outputs:[{name:"video_latent",type:"LATENT",links:[]},{name:"audio_latent",type:"LATENT",links:[]}] });
+    b.link(sL,0,sepL,0,"LATENT");
+    const upl=b.add("LTXVLatentUpsampler",`Upsample ${idx}`,[x,1780],{ inputs:[{name:"samples",type:"LATENT",link:null},{name:"upscale_model",type:"LATENT_UPSCALE_MODEL",link:null},{name:"vae",type:"VAE",link:null}], outputs:[{name:"LATENT",type:"LATENT",links:[]}] });
+    b.link(sepL,0,upl,0,"LATENT"); b.link(up,0,upl,1,"LATENT_UPSCALE_MODEL"); b.link(vvae,0,upl,2,"VAE");
+    let vH=upl, pH=ltxc, nHnd=ltxc, pHs=0, nHs=1, vHslot=0;
+    if(has && guide){
+      const gd=b.add("LTXVAddGuide",`Guide hi ${idx}`,[x,1960],{ wv:[0,1.0], inputs:[{name:"positive",type:"CONDITIONING",link:null},{name:"negative",type:"CONDITIONING",link:null},{name:"vae",type:"VAE",link:null},{name:"latent",type:"LATENT",link:null},{name:"image",type:"IMAGE",link:null}], outputs:[{name:"positive",type:"CONDITIONING",links:[]},{name:"negative",type:"CONDITIONING",links:[]},{name:"latent",type:"LATENT",links:[]}] });
+      b.link(ltxc,0,gd,0,"CONDITIONING"); b.link(ltxc,1,gd,1,"CONDITIONING"); b.link(vvae,0,gd,2,"VAE"); b.link(upl,0,gd,3,"LATENT"); b.link(guide,0,gd,4,"IMAGE");
+      vH=gd; pH=gd; nHnd=gd; pHs=0; nHs=1; vHslot=2;
+    }
+    const catH=b.add("LTXVConcatAVLatent",`Cat hi ${idx}`,[x,2180],{ inputs:[{name:"video_latent",type:"LATENT",link:null},{name:"audio_latent",type:"LATENT",link:null}], outputs:[{name:"latent",type:"LATENT",links:[]}] });
+    b.link(vH,vHslot,catH,0,"LATENT"); b.link(sepL,1,catH,1,"LATENT");
+    const gH=b.add("LTXVDualCFGGuider",`Guider H ${idx}`,[x,2340],{ wv:[1,1], inputs:[{name:"model",type:"MODEL",link:null},{name:"positive",type:"CONDITIONING",link:null},{name:"negative",type:"CONDITIONING",link:null}], outputs:[{name:"GUIDER",type:"GUIDER",links:[]}] });
+    b.link(unet,0,gH,0,"MODEL"); b.link(pH,pHs,gH,1,"CONDITIONING"); b.link(nHnd,nHs,gH,2,"CONDITIONING");
+    const sH=b.add("SamplerCustomAdvanced",`Sample H ${idx}`,[x,2520],{ inputs:[{name:"noise",type:"NOISE",link:null},{name:"guider",type:"GUIDER",link:null},{name:"sampler",type:"SAMPLER",link:null},{name:"sigmas",type:"SIGMAS",link:null},{name:"latent_image",type:"LATENT",link:null}], outputs:[{name:"output",type:"LATENT",links:[]},{name:"denoised_output",type:"LATENT",links:[]}] });
+    b.link(nH,0,sH,0,"NOISE"); b.link(gH,0,sH,1,"GUIDER"); b.link(samp,0,sH,2,"SAMPLER"); b.link(sigH,0,sH,3,"SIGMAS"); b.link(catH,0,sH,4,"LATENT");
+    const sepH=b.add("LTXVSeparateAVLatent",`Sep H ${idx}`,[x,2720],{ inputs:[{name:"av_latent",type:"LATENT",link:null}], outputs:[{name:"video_latent",type:"LATENT",links:[]},{name:"audio_latent",type:"LATENT",links:[]}] });
+    b.link(sH,0,sepH,0,"LATENT");
+    const vdec=b.add("VAEDecodeTiled",`VDec ${idx}`,[x,2880],{ wv:[768,64,4096,32], inputs:[{name:"samples",type:"LATENT",link:null},{name:"vae",type:"VAE",link:null}], outputs:[{name:"IMAGE",type:"IMAGE",links:[]}] });
+    b.link(sepH,0,vdec,0,"LATENT"); b.link(vvae,0,vdec,1,"VAE");
+    const adec=b.add("LTXVAudioVAEDecode",`ADec ${idx}`,[x,3080],{ inputs:[{name:"samples",type:"LATENT",link:null},{name:"audio_vae",type:"VAE",link:null}], outputs:[{name:"Audio",type:"AUDIO",links:[]}] });
+    b.link(sepH,1,adec,0,"LATENT"); b.link(avae,0,adec,1,"VAE");
+    const create=b.add("CreateVideo",`Create ${idx}`,[x,3220],{ wv:[FPS,8], inputs:[{name:"images",type:"IMAGE",link:null},{name:"audio",shape:7,type:"AUDIO",link:null}], outputs:[{name:"VIDEO",type:"VIDEO",links:[]}] });
+    b.link(vdec,0,create,0,"IMAGE"); b.link(adec,0,create,1,"AUDIO");
+    const comp=b.add("GetVideoComponents",`Comp ${idx}`,[x,3380],{ inputs:[{name:"video",type:"VIDEO",link:null}], outputs:[{name:"images",type:"IMAGE",links:[]},{name:"audio",type:"AUDIO",links:[]},{name:"fps",type:"FLOAT",links:[]},{name:"bit_depth",type:"INT",links:[]}] });
+    b.link(create,0,comp,0,"VIDEO");
+    const pref=b.add("ImageFromBatch",`Prefix ${idx}`,[x,3540],{ wv:[-overlap,overlap], inputs:[{name:"image",type:"IMAGE",link:null}], outputs:[{name:"IMAGE",type:"IMAGE",links:[]}] });
+    b.link(comp,0,pref,0,"IMAGE"); prefixIds.push(pref);
+    if(i===0){ imgIds.push(comp); audIds.push(comp); }
+    else {
+      const keep=Math.max(1,length-overlap);
+      const tr=b.add("ImageFromBatch",`Trim ${idx}`,[x,3700],{ wv:[overlap,keep], inputs:[{name:"image",type:"IMAGE",link:null}], outputs:[{name:"IMAGE",type:"IMAGE",links:[]}] });
+      b.link(comp,0,tr,0,"IMAGE");
+      const rx=b.add("CreateVideo",`Remux ${idx}`,[x,3840],{ wv:[FPS,8], inputs:[{name:"images",type:"IMAGE",link:null},{name:"audio",shape:7,type:"AUDIO",link:null}], outputs:[{name:"VIDEO",type:"VIDEO",links:[]}] });
+      b.link(tr,0,rx,0,"IMAGE"); b.link(comp,1,rx,1,"AUDIO");
+      const rc=b.add("GetVideoComponents",`After ${idx}`,[x,3980],{ inputs:[{name:"video",type:"VIDEO",link:null}], outputs:[{name:"images",type:"IMAGE",links:[]},{name:"audio",type:"AUDIO",links:[]},{name:"fps",type:"FLOAT",links:[]},{name:"bit_depth",type:"INT",links:[]}] });
+      b.link(rx,0,rc,0,"VIDEO"); imgIds.push(rc); audIds.push(rc);
+    }
+  }
+  joinAV(b,imgIds,audIds,N,base+N*col+80,FPS,"video/LTX_2.5_Long");
+  b.nodes.forEach((n,i)=>n.order=i);
+  return { id:`studio-ltx-${N}x`, revision:0, last_node_id:b.nextId-1, last_link_id:b.nextLink-1, nodes:b.nodes, links:b.links, groups:[], config:{}, extra:{ds:{scale:0.3,offset:[0,0]}}, version:0.4 };
+}
+
+function setStat(id,msg,type){ const el=$(id); el.textContent=msg; el.className="status "+type; }
+
+$("btnGenerate").onclick = () => {
+  let plan; try { plan=JSON.parse($("segmentsJson").value); } catch(e){ return setStat("genStatus","Bad JSON","error"); }
+  if(!plan.segments?.length) return setStat("genStatus","No segments","error");
+  const e=ENGINES[currentEngine];
+  const cfg = {
+    width: parseInt($("width").value)||768, height: parseInt($("height").value)||1344,
+    steps: parseInt($("steps").value)||e.steps||20, seg: parseFloat($("segLen").value)||10,
+    startImage: $("startImage").value.trim() || null,
+    unet: e.kind==="ltx" ? "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors" : "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    clip: e.kind==="ltx" ? "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors" : "qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors",
+    vvae: e.kind==="ltx" ? "ltx-2.5-video-vae-bf16.safetensors" : "minimax_h3_video_vae_fp16.safetensors",
+    avae: e.kind==="ltx" ? "ltx-2.5-audio-vae-bf16.safetensors" : "minimax_h3_audio_vae_fp32.safetensors",
+    up: "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
+  };
+  if((currentEngine==="h3-smooth"||currentEngine==="h3-motion") && !cfg.startImage) return setStat("genStatus","Start image required for this engine","error");
+  let doc;
+  if(currentEngine==="ltx25") { cfg.width=1280; cfg.height=720; doc=buildLTX(plan.segments,cfg); }
+  else doc=buildH3LastFrame(plan.segments,cfg, currentEngine==="h3-motion");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(doc,null,2)],{type:"application/json"}));
+  a.download=`studio_${currentEngine}_${plan.segments.length}x.json`;
+  a.click();
+  setStat("genStatus",`Downloaded ${doc.last_node_id} nodes`,"success");
+};
+$("btnSeg").onclick=()=>{ try{ JSON.parse($("segmentsJson").value); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([$("segmentsJson").value],{type:"application/json"})); a.download="segments.json"; a.click(); }catch(e){ setStat("genStatus","Bad JSON","error"); } };
+
+renderEngines(); updateCalc(); renderModels();
+</script>
+</body>
+</html>
