@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ComfyUI Template → HTML Frontend Builder</title>
+<style>
+  :root {
+    --bg: #0c0e12; --panel: #161a22; --border: #2a3140; --text: #e8ecf4;
+    --muted: #9aa3b2; --accent: #7c9cff; --ok: #3ecf8e; --warn: #e0b35c; --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.45;
+    padding: 22px; max-width: 1240px; margin: 0 auto;
+  }
+  h1 { font-size: 1.45rem; }
+  .sub { color: var(--muted); margin: 4px 0 18px; font-size: 0.92rem; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+  .panel h2 { font-size: 1.02rem; color: var(--accent); margin-bottom: 10px; }
+  label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea {
+    width: 100%; background: #10141c; border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 8px 11px; margin-bottom: 10px; font-size: 0.9rem;
+  }
+  textarea { min-height: 72px; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; resize: vertical; }
+  .row { display: flex; gap: 10px; } .row > * { flex: 1; }
+  @media (max-width: 720px) { .row { flex-direction: column; } }
+  button.go { background: var(--accent); color: #0b1020; border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; }
+  button.sec { background: #2a3140; color: var(--text); border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .drop {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 28px; text-align: center;
+    color: var(--muted); background: #10141c; cursor: pointer;
+  }
+  .drop.over { border-color: var(--accent); color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  th, td { text-align: left; padding: 6px 7px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  code { background: #10141c; padding: 1px 5px; border-radius: 4px; font-size: 0.84em; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin: -2px 0 10px; }
+  .status { display: none; margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: 0.88rem; }
+  .status.info { display: block; background: #1c2433; color: #a8c0ff; }
+  .status.ok { display: block; background: #14332a; color: var(--ok); }
+  .status.err { display: block; background: #331c1c; color: var(--bad); }
+  .badge { font-size: 0.68rem; padding: 1px 7px; border-radius: 99px; background: #243044; color: #9ab0ff; }
+  .badge.prompt { background: #1a3328; color: #7ee0b0; }
+  .badge.model { background: #332a14; color: #e0b35c; }
+  .badge.image { background: #2a1a33; color: #c9a8ff; }
+  .badge.sub { background: #1a2433; color: #8ab4ff; }
+  .badge.ignore { background: #2a2a2a; color: #888; }
+  .group { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; background: #12161e; }
+  .group h3 { font-size: 0.9rem; margin-bottom: 8px; }
+  .muted { color: var(--muted); font-size: 0.78rem; }
+  .hidden { display: none; }
+  .check { width: auto; margin: 0 6px 0 0; }
+</style>
+</head>
+<body>
+<h1>ComfyUI Template → HTML Frontend</h1>
+<p class="sub">
+  Drop a workflow JSON. Widgets are classified <em>by name</em> (subgraph <code>script</code> is included; notes, math, and sampler internals are not).
+  The downloaded page is a director UI: idea, <strong>LLM / API prompt enhancement</strong>, models, shots — not a raw widget dump.
+</p>
+
+<div class="panel">
+  <h2>1. Load template</h2>
+  <div class="drop" id="drop">Drop ComfyUI JSON here, or click to choose a file</div>
+  <input type="file" id="file" accept=".json,application/json" class="hidden">
+  <p class="hint" id="loadedHint">No file loaded.</p>
+  <div class="row">
+    <div>
+      <label>Frontend title</label>
+      <input id="appTitle" value="ComfyUI Workflow Frontend">
+    </div>
+    <div>
+      <label>Download filename prefix</label>
+      <input id="outPrefix" value="workflow">
+    </div>
+  </div>
+  <label>Subtitle</label>
+  <input id="appSub" value="Plan shots with a local split or an API, then download JSON for ComfyUI. Subgraph prompts are filled too.">
+</div>
+
+<div class="panel">
+  <h2>2. Detected widgets</h2>
+  <p class="hint">Only green/gold/purple rows are auto-exposed. Grey “ignore” (Markdown notes, math expressions, Spectrum, mmproj, upload) stay out of the form.</p>
+  <div style="overflow:auto; max-height: 260px;">
+    <table>
+      <thead><tr><th></th><th>Where</th><th>Node</th><th>Widget</th><th>Kind</th><th>Preview</th></tr></thead>
+      <tbody id="widgetRows"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>3. Form groups</h2>
+  <p class="hint" id="flavorHint">Auto-groups after load. H3 Multishot graphs get a director preset (shots + CLIP/UNET/VAE + turbo bypass + 17n+5 duration).</p>
+  <div id="groups"></div>
+  <div class="actions">
+    <button class="sec" id="btnRegroup">Re-run auto groups</button>
+    <button class="go" id="btnHtml">Download HTML frontend</button>
+    <button class="sec" id="btnSchema">Download field schema JSON</button>
+  </div>
+  <div id="status" class="status"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let workflow = null;
+let widgets = [];
+let groups = [];
+let flavor = "generic";
+
+function setStatus(kind, msg) {
+  const el = $("status");
+  el.className = "status " + kind;
+  el.textContent = msg;
+}
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function previewVal(v) {
+  if (v == null) return "";
+  const s = typeof v === "string" ? v : JSON.stringify(v);
+  return s.length > 72 ? s.slice(0, 69) + "…" : s;
+}
+
+const IGNORE_TYPES = /markdownnote|mathexpression|spectrum|note$/i;
+const IGNORE_KEYS = new Set([
+  "expression", "weight_dtype", "mmproj_name", "upload", "fixed",
+  "control_after_generate", "scheduler", "sampler_name", "sage_attention",
+  "allow_compile", "denoise", "bit_depth", "fps", "codec", "format",
+  "filename_prefix", "aggressive", "type"
+]);
+
+function kindOf(nodeType, key, value, title) {
+  const k = (key || "").toLowerCase();
+  const t = (nodeType || "").toLowerCase();
+  const ttl = (title || "").toLowerCase();
+  if (IGNORE_TYPES.test(t) || IGNORE_KEYS.has(k)) return "ignore";
+  if (t === "loadimage" && k === "image") return "image";
+  if (k === "unet_name") return "unet";
+  if (k === "clip_name") return "clip";
+  if (k === "lora_name") return "lora";
+  if (k === "vae_name_1" || (k === "vae_name" && String(value).toLowerCase().includes("audio"))) return "audio_vae";
+  if (k === "vae_name") return "video_vae";
+  if (k === "script" && (t.includes("scriptsplit") || t.includes("multishot"))) return "prompt";
+  if (k === "prompt") return "prompt";
+  if (t === "primitivestringmultiline" && (k === "value" || k === "text")) return "prompt";
+  if (t === "cliptextencode" && (k === "text" || k === "prompt")) return "prompt";
+  if (k === "shot_count") return "shot_count";
+  if (k === "steps" || k === "value_2") return "steps";
+  if (k === "width") return "width";
+  if (k === "height") return "height";
+  if (k === "memory_frames") return "memory_frames";
+  if (k === "anchor_frames") return "anchor_frames";
+  if (k === "frames_per_shot") return "frames_per_shot";
+  if (k === "value_1" || (t === "primitivefloat" && /duration/i.test(nodeType))) return "duration";
+  if (t === "primitivefloat" && k === "value") return "duration";
+  if (t.includes("boolean") && typeof value === "boolean" && /turbo|lora|lightning/i.test(ttl)) return "turbo";
+  if (k.includes("seed") && k !== "seed_per_shot") return "seed";
+  return "other";
+}
+
+function collectNodeWidgets(node, scope, subgraphId, subgraphName) {
+  const out = [];
+  const named = node.widgets_values_named || {};
+  const keys = Object.keys(named);
+  if (!keys.length) return out;
+  keys.forEach((key, i) => {
+    const value = named[key];
+    out.push({
+      id: `${scope}:${subgraphId || "root"}:${node.id}:${key}`,
+      scope, subgraphId, subgraphName,
+      nodeId: node.id,
+      nodeType: node.type,
+      title: node.title || node.type,
+      widget: key,
+      index: i,
+      value,
+      kind: kindOf(node.type, key, value, node.title)
+    });
+  });
+  return out;
+}
+
+function analyze(wf) {
+  const list = [];
+  (wf.nodes || []).forEach(n => list.push(...collectNodeWidgets(n, "root", null, "canvas")));
+  (((wf.definitions || {}).subgraphs) || []).forEach(sg => {
+    (sg.nodes || []).forEach(n => list.push(...collectNodeWidgets(n, "sub", sg.id, sg.name || sg.id)));
+  });
+  return list;
+}
+
+function detectFlavor(list) {
+  if (list.some(w => /H3MultishotMemorySampler/i.test(w.nodeType))) return "h3_multishot";
+  if (list.some(w => /MiniMaxH3/i.test(w.nodeType))) return "h3_clipchain";
+  return "generic";
+}
+
+const GROUP_META = {
+  prompt: { label: "Shots / prompts", control: "shots" },
+  clip: { label: "CLIP / text encoder", control: "text" },
+  unet: { label: "UNET / diffusion model", control: "text" },
+  lora: { label: "LoRA filename", control: "text" },
+  video_vae: { label: "Video VAE", control: "text" },
+  audio_vae: { label: "Audio VAE", control: "text" },
+  image: { label: "Start image (ComfyUI input/)", control: "text" },
+  steps: { label: "Sampler steps", control: "number" },
+  width: { label: "Width", control: "number" },
+  height: { label: "Height", control: "number" },
+  duration: { label: "Seconds per shot", control: "number" },
+  memory_frames: { label: "Memory frames", control: "number" },
+  anchor_frames: { label: "Anchor frames", control: "number" },
+  turbo: { label: "Turbo / lightning LoRA enabled", control: "checkbox" }
+};
+
+function defaultOf(ids) {
+  const w = widgets.find(x => ids.includes(x.id) && x.value != null && x.value !== "");
+  return w ? w.value : "";
+}
+
+function parseSeedShots() {
+  const w = widgets.find(x => x.kind === "prompt" && x.nodeType === "PrimitiveStringMultiline");
+  if (w && typeof w.value === "string") {
+    try {
+      const o = JSON.parse(w.value);
+      if (Array.isArray(o.prompts)) return o.prompts.map(String);
+    } catch (_) {}
+  }
+  const s = widgets.find(x => x.kind === "prompt" && /ScriptSplit|Multishot/i.test(x.nodeType) && x.widget === "script");
+  if (s && typeof s.value === "string" && s.value.includes("---")) {
+    return s.value.split(/\n---\n/).map(x => x.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function autoGroups(list) {
+  const interesting = list.filter(w => GROUP_META[w.kind]);
+  const buckets = {};
+  interesting.forEach(w => {
+    (buckets[w.kind] = buckets[w.kind] || []).push(w.id);
+  });
+  const order = ["prompt", "image", "clip", "unet", "video_vae", "audio_vae", "lora", "turbo", "steps", "width", "height", "duration", "memory_frames", "anchor_frames"];
+  return order.filter(k => buckets[k]).map((k, i) => ({
+    id: "g" + i,
+    enabled: true,
+    kind: k,
+    label: GROUP_META[k].label,
+    control: GROUP_META[k].control,
+    targetIds: buckets[k],
+    defaultValue: defaultOf(buckets[k])
+  }));
+}
+
+function renderWidgets() {
+  const tb = $("widgetRows");
+  tb.innerHTML = "";
+  widgets.forEach(w => {
+    const tr = document.createElement("tr");
+    const badge = w.kind === "prompt" ? "prompt"
+      : w.kind === "ignore" ? "ignore"
+      : w.kind === "image" ? "image"
+      : (["clip","unet","lora","video_vae","audio_vae"].includes(w.kind) ? "model" : "");
+    const checked = GROUP_META[w.kind] ? "checked" : "";
+    tr.innerHTML = `<td><input type="checkbox" class="check pick" data-id="${w.id}" ${checked}></td>
+      <td>${w.scope === "sub" ? `<span class="badge sub">sub</span> ${esc(w.subgraphName || "")}` : "canvas"}</td>
+      <td>${esc(w.title)}<div class="muted">${esc(w.nodeType)} #${w.nodeId}</div></td>
+      <td><code>${esc(w.widget)}</code></td>
+      <td><span class="badge ${badge}">${w.kind}</span></td>
+      <td class="muted">${esc(previewVal(w.value))}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function renderGroups() {
+  const box = $("groups");
+  box.innerHTML = "";
+  groups.forEach(g => {
+    const div = document.createElement("div");
+    div.className = "group";
+    const targets = g.targetIds.map(id => widgets.find(w => w.id === id)).filter(Boolean);
+    div.innerHTML = `
+      <h3><input type="checkbox" class="check genable" data-gid="${g.id}" ${g.enabled ? "checked" : ""}> ${esc(g.label)}</h3>
+      <div class="row">
+        <div><label>Label</label><input data-g="${g.id}" data-f="label" value="${esc(g.label)}"></div>
+        <div><label>Control</label>
+          <select data-g="${g.id}" data-f="control">
+            ${["shots","textarea","text","number","checkbox"].map(c => `<option value="${c}" ${g.control===c?"selected":""}>${c}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <p class="muted">${targets.length} targets · default: ${esc(previewVal(g.defaultValue))}
+        <br>${targets.map(t => `${t.scope === "sub" ? "sub/" : ""}${t.nodeType}.${t.widget}`).join(" · ")}</p>`;
+    box.appendChild(div);
+  });
+  box.querySelectorAll("input[data-f], select[data-f]").forEach(el => {
+    el.addEventListener("change", () => {
+      const g = groups.find(x => x.id === el.getAttribute("data-g"));
+      if (g) g[el.getAttribute("data-f")] = el.value;
+    });
+  });
+  box.querySelectorAll(".genable").forEach(el => {
+    el.addEventListener("change", () => {
+      const g = groups.find(x => x.id === el.getAttribute("data-gid"));
+      if (g) g.enabled = el.checked;
+    });
+  });
+}
+
+function loadWorkflow(text, name) {
+  workflow = JSON.parse(text);
+  widgets = analyze(workflow);
+  flavor = detectFlavor(widgets);
+  groups = autoGroups(widgets);
+  const nSub = (((workflow.definitions || {}).subgraphs) || []).length;
+  $("loadedHint").textContent = `${name || "workflow"} · ${widgets.length} widgets · ${nSub} subgraph(s) · flavor: ${flavor}`;
+  $("flavorHint").textContent = flavor === "h3_multishot"
+    ? "Detected H3MultishotMemorySampler. Frontend will include duration→17n+5, turbo LoRA bypass, CLIP vs UNET, and API shot planner."
+    : "Generic graph. Frontend still includes idea + API prompt enhancement + grouped model/shot fields with template defaults.";
+  const guess = (name || "").replace(/\.json$/i, "").replace(/[_-]+/g, " ");
+  if (guess) $("appTitle").value = guess;
+  $("outPrefix").value = (name || "workflow").replace(/\.json$/i, "") || "workflow";
+  renderWidgets();
+  renderGroups();
+  setStatus("ok", "Parsed. Review groups, then download HTML (planner/API is always included).");
+}
+
+$("drop").addEventListener("click", () => $("file").click());
+$("drop").addEventListener("dragover", e => { e.preventDefault(); $("drop").classList.add("over"); });
+$("drop").addEventListener("dragleave", () => $("drop").classList.remove("over"));
+$("drop").addEventListener("drop", e => {
+  e.preventDefault();
+  $("drop").classList.remove("over");
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  f.text().then(t => loadWorkflow(t, f.name)).catch(err => setStatus("err", String(err)));
+});
+$("file").addEventListener("change", () => {
+  const f = $("file").files[0];
+  if (!f) return;
+  f.text().then(t => loadWorkflow(t, f.name)).catch(err => setStatus("err", String(err)));
+});
+$("btnRegroup").addEventListener("click", () => {
+  if (!widgets.length) return;
+  const picked = new Set([...document.querySelectorAll(".pick:checked")].map(x => x.getAttribute("data-id")));
+  const subset = widgets.filter(w => picked.has(w.id));
+  groups = autoGroups(subset.length ? subset : widgets);
+  renderGroups();
+});
+
+function schemaPayload() {
+  const shots = parseSeedShots();
+  return {
+    title: $("appTitle").value.trim() || "ComfyUI Frontend",
+    subtitle: $("appSub").value.trim(),
+    outPrefix: $("outPrefix").value.trim() || "workflow",
+    flavor,
+    planner: true,
+    seedShots: shots,
+    groups: groups.filter(g => g.enabled).map(g => ({
+      id: g.id,
+      label: g.label,
+      kind: g.kind,
+      control: g.control,
+      defaultValue: g.defaultValue,
+      targets: g.targetIds.map(id => {
+        const w = widgets.find(x => x.id === id);
+        if (!w) return null;
+        return {
+          scope: w.scope, subgraphId: w.subgraphId, nodeId: w.nodeId,
+          nodeType: w.nodeType, widget: w.widget, index: w.index, kind: w.kind
+        };
+      }).filter(Boolean)
+    }))
+  };
+}
+
+function embedJson(obj) {
+  return JSON.stringify(obj).replace(/</g, "\\u003c");
+}
+
+function generatedPage(schema) {
+  const title = esc(schema.title);
+  const sub = esc(schema.subtitle);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title}</title>
+<style>
+  :root { --bg:#0f1115; --panel:#1a1d24; --border:#2a2f3a; --text:#e6e9ef; --muted:#9aa3b2; --accent:#6c8cff; --accent-hover:#8aa4ff; --success:#3ecf8e; --danger:#ff6b6b; --warn:#e0b35c; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.5; padding:24px; max-width:1100px; margin:0 auto; }
+  h1 { font-size:1.5rem; margin-bottom:4px; }
+  .subtitle { color:var(--muted); margin-bottom:22px; font-size:.93rem; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:820px) { .grid { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px 20px; }
+  .panel h2 { font-size:1.05rem; margin-bottom:12px; color:var(--accent); }
+  .full { grid-column:1 / -1; }
+  label { display:block; font-size:.82rem; color:var(--muted); margin-bottom:4px; }
+  input, select, textarea { width:100%; background:#12151b; border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px 12px; font-size:.93rem; margin-bottom:12px; }
+  textarea { min-height:90px; resize:vertical; font-family:ui-monospace,Menlo,monospace; font-size:.85rem; }
+  .row { display:flex; gap:12px; } .row > * { flex:1; }
+  button { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px 16px; font-size:.93rem; cursor:pointer; font-weight:500; }
+  button:hover { background:var(--accent-hover); }
+  button.secondary { background:#2a3140; }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; }
+  .status { margin-top:14px; padding:11px 14px; border-radius:8px; font-size:.88rem; display:none; }
+  .status.info { background:#1c2433; color:#a8c0ff; display:block; }
+  .status.success { background:#14332a; color:var(--success); display:block; }
+  .status.error { background:#331c1c; color:var(--danger); display:block; }
+  .hint { font-size:.78rem; color:var(--muted); margin-top:-6px; margin-bottom:10px; }
+  .shot-card { border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px; background:#141820; }
+  .shot-card h3 { font-size:.88rem; color:#9ab0ff; margin-bottom:8px; }
+  .warn-box { background:#2a2414; border-left:3px solid var(--warn); padding:10px 12px; border-radius:0 8px 8px 0; font-size:.84rem; color:#e8d9a8; margin-bottom:12px; }
+  code { background:#10141c; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<h1>${title}</h1>
+<p class="subtitle">${sub}</p>
+<div class="grid">
+  <div class="panel">
+    <h2>1. Idea &amp; length</h2>
+    <label>Raw idea (for the planner)</label>
+    <textarea id="userPrompt" placeholder="Describe the scene, characters, camera, and audio…"></textarea>
+    <div class="row">
+      <div><label>Total duration (s)</label><input type="number" id="duration" value="30" min="4" max="180"></div>
+      <div><label>Number of shots</label><input type="number" id="shotCount" value="3" min="1" max="12"></div>
+    </div>
+    <p class="hint" id="lenHint"></p>
+  </div>
+  <div class="panel">
+    <h2>2. Prompt enhancement (API)</h2>
+    <label>Provider</label>
+    <select id="provider">
+      <option value="none">None / local split (no API)</option>
+      <option value="xai">Grok (xAI)</option>
+      <option value="openai">OpenAI</option>
+      <option value="ollama">Ollama (local)</option>
+    </select>
+    <div id="apiKeyGroup">
+      <label>API key (this browser only)</label>
+      <input type="password" id="apiKey" placeholder="xai-… / sk-…">
+    </div>
+    <div id="ollamaGroup" style="display:none">
+      <label>Ollama URL</label><input id="ollamaUrl" value="http://localhost:11434">
+      <label>Ollama model</label><input id="ollamaModel" value="qwen2.5:32b">
+    </div>
+    <label>Cloud model</label>
+    <input id="modelName" value="grok-4">
+    <p class="hint">Local split writes continuity-aware shots. Grok / OpenAI / Ollama rewrite each shot with camera, SFX, and dialogue.</p>
+  </div>
+  <div class="panel full" id="modelsHost"></div>
+  <div class="panel full">
+    <h2>Shots</h2>
+    <p class="hint">These fill every real prompt/script slot (outer JSON <code>{"prompts":[]}</code> and subgraph <code>---</code> scripts). Notes and math nodes are not touched.</p>
+    <div id="shotList"></div>
+    <div class="actions">
+      <button id="btnPlan">Generate shots (local)</button>
+      <button id="btnGenerate" class="secondary">Download workflow JSON</button>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+</div>
+<script type="application/json" id="wf-template">${embedJson(workflow)}<\/script>
+<script type="application/json" id="wf-schema">${embedJson(schema)}<\/script>
+<script>
+${frontendRuntime()}
+<\/script>
+</body>
+</html>`;
+}
+
+function frontendRuntime() {
+  return `const $ = id => document.getElementById(id);
+const TEMPLATE = JSON.parse(document.getElementById("wf-template").textContent);
+const SCHEMA = JSON.parse(document.getElementById("wf-schema").textContent);
+const LS = "comfy_frontend_planner_v1";
+
+function h3Frames(seconds, fps) {
+  fps = fps || 24;
+  const raw = Math.max(5, Math.round(seconds * fps));
+  const add = (5 - (raw % 17) + 17) % 17;
+  return raw + add;
+}
+function perShot() {
+  const total = parseFloat($("duration").value) || 30;
+  const n = Math.max(1, parseInt($("shotCount").value, 10) || 1);
+  return { total, n, per: total / n, frames: h3Frames(total / n) };
+}
+function updateHint() {
+  const { n, per, frames } = perShot();
+  $("lenHint").textContent = n + " shot(s) × " + per.toFixed(1) + " s · " + frames + " frames/shot (17n+5 @ 24fps)";
+}
+function toggleProvider() {
+  const p = $("provider").value;
+  $("apiKeyGroup").style.display = (p === "none" || p === "ollama") ? "none" : "block";
+  $("ollamaGroup").style.display = p === "ollama" ? "block" : "none";
+  if (p === "xai") $("modelName").value = $("modelName").value || "grok-4";
+  if (p === "openai" && $("modelName").value === "grok-4") $("modelName").value = "gpt-4o";
+  $("btnPlan").textContent = p === "none" ? "Generate shots (local)" : "Enhance shots with API";
+  saveLs();
+}
+function saveLs() {
+  try {
+    localStorage.setItem(LS, JSON.stringify({
+      provider: $("provider").value, apiKey: $("apiKey").value,
+      modelName: $("modelName").value, ollamaUrl: $("ollamaUrl").value, ollamaModel: $("ollamaModel").value
+    }));
+  } catch (e) {}
+}
+function loadLs() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LS) || "{}");
+    if (s.provider) $("provider").value = s.provider;
+    if (s.apiKey) $("apiKey").value = s.apiKey;
+    if (s.modelName) $("modelName").value = s.modelName;
+    if (s.ollamaUrl) $("ollamaUrl").value = s.ollamaUrl;
+    if (s.ollamaModel) $("ollamaModel").value = s.ollamaModel;
+  } catch (e) {}
+}
+function setStatus(kind, msg) {
+  const el = $("status");
+  el.className = "status " + kind;
+  el.textContent = msg;
+}
+function gByKind(kind) { return SCHEMA.groups.find(g => g.kind === kind); }
+function fieldId(g) { return "f_" + g.id; }
+
+function renderModels() {
+  const host = $("modelsHost");
+  const skip = new Set(["prompt"]);
+  const bits = SCHEMA.groups.filter(g => !skip.has(g.kind));
+  if (!bits.length) { host.style.display = "none"; return; }
+  let html = "<h2>3. Models &amp; settings</h2>";
+  if (SCHEMA.flavor === "h3_multishot") {
+    html += '<div class="warn-box">CLIP is the text encoder inside the subgraph (<code>H3ClipLoaderAny</code>), not the UNET. If you do not have the turbo LoRA file, leave Turbo off so that node is bypassed.</div>';
+  }
+  html += '<div class="row" id="modelRow1"></div><div class="row" id="modelRow2"></div>';
+  host.innerHTML = html;
+  const r1 = ["clip","unet","video_vae","audio_vae"].map(gByKind).filter(Boolean);
+  const r2 = ["image","lora","steps","width","height","duration","memory_frames","anchor_frames","turbo"].map(gByKind).filter(Boolean);
+  function fill(rowEl, list) {
+    if (!rowEl) return;
+    list.forEach(g => {
+      const d = document.createElement("div");
+      const lab = document.createElement("label");
+      lab.textContent = g.label;
+      d.appendChild(lab);
+      if (g.control === "checkbox") {
+        const sel = document.createElement("select");
+        sel.id = fieldId(g);
+        sel.innerHTML = '<option value="no">No — bypass LoRA if missing</option><option value="yes">Yes — load LoRA</option>';
+        sel.value = (g.defaultValue === true || g.defaultValue === "true") ? "yes" : "no";
+        d.appendChild(sel);
+      } else {
+        const inp = document.createElement("input");
+        inp.id = fieldId(g);
+        inp.type = g.control === "number" ? "number" : "text";
+        inp.value = g.defaultValue == null ? "" : String(g.defaultValue);
+        d.appendChild(inp);
+      }
+      rowEl.appendChild(d);
+    });
+  }
+  fill($("modelRow1"), r1);
+  fill($("modelRow2"), r2);
+}
+
+function renderShots(texts) {
+  const n = Math.max(1, parseInt($("shotCount").value, 10) || 1);
+  const box = $("shotList");
+  const prev = texts || [...box.querySelectorAll("textarea")].map(t => t.value);
+  box.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const card = document.createElement("div");
+    card.className = "shot-card";
+    card.innerHTML = "<h3>Shot " + (i+1) + "</h3>";
+    const ta = document.createElement("textarea");
+    ta.setAttribute("data-shot", "1");
+    ta.value = prev[i] || "";
+    card.appendChild(ta);
+    box.appendChild(card);
+  }
+}
+function collectShots() {
+  return [...$("shotList").querySelectorAll("textarea")].map(t => t.value.trim()).filter(Boolean);
+}
+
+const PLANNER_H3 = "You are a MiniMax H3 multishot director for H3MultishotMemorySampler. Turn the idea into N self-contained shots. Do NOT write motion-prefix or last-frame lock language. Each shot is one paragraph: picture, camera, diegetic sound, optional dialogue, score. Keep identity/wardrobe/location consistent. Output ONLY JSON with key shots as an array of strings.";
+const PLANNER_GENERIC = "You are a video prompt director. Split the user's idea into N sequential shot prompts. Each shot is self-contained, cinematic, and describes picture + camera + audio. Output ONLY JSON with key shots as an array of strings.";
+
+function localShots(raw, n, per) {
+  const shots = [];
+  for (let i = 0; i < n; i++) {
+    const phase = i === 0 ? "Establish subject, space, lighting, and audio bed."
+      : i === n - 1 ? "Resolve the beat; hold identity."
+      : "Advance the same scene after the join.";
+    shots.push("integrated_multimodal_description: " + raw + " Shot " + (i+1) + " of " + n + " (~" + per.toFixed(1) + "s). " + phase + " overall_soundscape: Continuous diegetic sound. non_diegetic_music: One musical bed. tracking/camera notes: Motivated camera; do not snap lens on frame 0.");
+  }
+  return shots;
+}
+function parseLLM(text) {
+  let t = String(text).trim();
+  const fence = String.fromCharCode(96,96,96);
+  if (t.slice(0, 3) === fence) {
+    t = t.slice(3);
+    if (t.slice(0, 4).toLowerCase() === "json") t = t.slice(4);
+    if (t.slice(-3) === fence) t = t.slice(0, -3);
+    t = t.trim();
+  }
+  let obj;
+  try { obj = JSON.parse(t); } catch (e) {
+    const a = t.indexOf("{");
+    const b = t.lastIndexOf("}");
+    if (a < 0 || b <= a) throw new Error("API did not return JSON");
+    obj = JSON.parse(t.slice(a, b + 1));
+  }
+  if (Array.isArray(obj.shots)) return obj.shots.map(String);
+  if (Array.isArray(obj.prompts)) return obj.prompts.map(String);
+  throw new Error("JSON missing shots[]");
+}
+async function callLLM(raw, n, total) {
+  const p = $("provider").value;
+  const sys = SCHEMA.flavor === "h3_multishot" ? PLANNER_H3 : PLANNER_GENERIC;
+  const userMsg = "raw_user_prompt: " + raw + "\\nshot_count: " + n + "\\ntotal_duration_seconds: " + total + "\\nseconds_per_shot: " + (total / n).toFixed(2);
+  if (p === "ollama") {
+    const res = await fetch($("ollamaUrl").value.replace(/\\/$/, "") + "/api/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: $("ollamaModel").value, messages: [{ role: "system", content: sys }, { role: "user", content: userMsg }], stream: false, options: { temperature: 0.4 } })
+    });
+    if (!res.ok) throw new Error("Ollama " + res.status);
+    const data = await res.json();
+    return parseLLM(data.message && data.message.content);
+  }
+  const base = p === "xai" ? "https://api.x.ai/v1" : "https://api.openai.com/v1";
+  const res = await fetch(base + "/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + $("apiKey").value },
+    body: JSON.stringify({ model: $("modelName").value, messages: [{ role: "system", content: sys }, { role: "user", content: userMsg }], temperature: 0.4 })
+  });
+  if (!res.ok) throw new Error(p + " " + res.status + " " + (await res.text()).slice(0, 240));
+  const data = await res.json();
+  return parseLLM(data.choices[0].message.content);
+}
+
+function setWidget(node, name, value, index) {
+  if (!node.widgets_values_named) node.widgets_values_named = {};
+  node.widgets_values_named[name] = value;
+  if (node.properties && node.properties.h3_widget_values) node.properties.h3_widget_values[name] = value;
+  if (!Array.isArray(node.widgets_values)) return;
+  const keys = Object.keys(node.widgets_values_named);
+  const idx = typeof index === "number" ? index : keys.indexOf(name);
+  if (idx >= 0 && idx < node.widgets_values.length) node.widgets_values[idx] = value;
+}
+function findNode(wf, t) {
+  if (t.scope === "root") return (wf.nodes || []).find(n => n.id === t.nodeId);
+  const sg = (((wf.definitions || {}).subgraphs) || []).find(s => s.id === t.subgraphId);
+  return sg ? (sg.nodes || []).find(n => n.id === t.nodeId) : null;
+}
+function walkNodes(wf, fn) {
+  (wf.nodes || []).forEach(n => fn(n));
+  (((wf.definitions || {}).subgraphs) || []).forEach(sg => (sg.nodes || []).forEach(n => fn(n)));
+}
+function shotPayloads(texts) {
+  const shots = texts.map(s => s.trim()).filter(Boolean);
+  return { json: JSON.stringify({ prompts: shots }) + "\\n", dash: shots.join("\\n---\\n\\n") + "\\n", count: shots.length };
+}
+function promptValueFor(t, p) {
+  const type = (t.nodeType || "").toLowerCase();
+  const w = (t.widget || "").toLowerCase();
+  if (w === "shot_count") return p.count;
+  if (type.includes("scriptsplit") || type.includes("multishot") || w === "script") return p.dash;
+  if (type.includes("primitivestring") || w === "prompt" || w === "value") return p.json;
+  return p.json;
+}
+function readGroup(g) {
+  const el = $(fieldId(g));
+  if (!el) return g.defaultValue;
+  if (g.control === "checkbox" || el.tagName === "SELECT") return el.value === "yes" || el.value === "true";
+  if (g.control === "number") { const n = Number(el.value); return Number.isFinite(n) ? n : g.defaultValue; }
+  return el.value;
+}
+
+function patch() {
+  const wf = JSON.parse(JSON.stringify(TEMPLATE));
+  const shots = collectShots();
+  const p = shotPayloads(shots);
+  const { per, frames, n } = perShot();
+  SCHEMA.groups.forEach(g => {
+    if (g.kind === "prompt") {
+      g.targets.forEach(t => {
+        const node = findNode(wf, t);
+        if (!node) return;
+        setWidget(node, t.widget, promptValueFor(t, p), t.index);
+      });
+      return;
+    }
+    let v = readGroup(g);
+    if (g.kind === "duration") v = per;
+    if (g.kind === "frames_per_shot") v = frames;
+    if (g.kind === "turbo") {
+      const on = $("f_" + g.id) ? $("f_" + g.id).value === "yes" : false;
+      walkNodes(wf, node => {
+        if (node.type === "LoraLoaderModelOnly") node.mode = on ? 0 : 4;
+        if (node.type === "PrimitiveBoolean" && /turbo|lora|lightning/i.test(node.title || "")) {
+          setWidget(node, "value", on, 0);
+        }
+      });
+      v = on;
+    }
+    g.targets.forEach(t => {
+      const node = findNode(wf, t);
+      if (!node) return;
+      setWidget(node, t.widget, v, t.index);
+    });
+  });
+  walkNodes(wf, node => {
+    if (node.type === "H3ScriptSplit" || node.type === "H3MultishotMemorySampler") {
+      setWidget(node, "script", p.dash, 0);
+      if (node.widgets_values_named && "shot_count" in node.widgets_values_named) setWidget(node, "shot_count", p.count);
+      if (node.type === "H3MultishotMemorySampler") {
+        setWidget(node, "frames_per_shot", frames);
+        const st = gByKind("steps");
+        if (st) setWidget(node, "steps", readGroup(st));
+      }
+    }
+    if (node.type === "PrimitiveFloat") setWidget(node, "value", per, 0);
+    if (node.type === "BasicScheduler") {
+      const st = gByKind("steps");
+      if (st) setWidget(node, "steps", readGroup(st));
+    }
+  });
+  return wf;
+}
+
+function download(name, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+$("provider").addEventListener("change", toggleProvider);
+$("apiKey").addEventListener("change", saveLs);
+$("duration").addEventListener("input", updateHint);
+$("shotCount").addEventListener("input", () => { updateHint(); renderShots(); });
+$("btnPlan").addEventListener("click", async () => {
+  const raw = $("userPrompt").value.trim();
+  if (!raw) return setStatus("error", "Enter an idea first.");
+  const { n, total, per } = perShot();
+  try {
+    let shots;
+    if ($("provider").value === "none") shots = localShots(raw, n, per);
+    else { setStatus("info", "Calling " + $("provider").value + "…"); shots = await callLLM(raw, n, total); }
+    if (shots.length) { $("shotCount").value = String(shots.length); renderShots(shots); updateHint(); }
+    setStatus("success", shots.length + " shots ready. Edit, then download JSON.");
+  } catch (e) { setStatus("error", String(e.message || e)); }
+});
+$("btnGenerate").addEventListener("click", () => {
+  if (!collectShots().length) return setStatus("error", "Need at least one shot (plan locally or with API).");
+  const wf = patch();
+  download((SCHEMA.outPrefix || "workflow") + "_filled.json", wf);
+  setStatus("success", "Downloaded. Prompt/script slots + models patched; notes/math left intact.");
+});
+
+loadLs();
+toggleProvider();
+renderModels();
+const seed = SCHEMA.seedShots || [];
+if (seed.length) $("shotCount").value = String(seed.length);
+renderShots(seed);
+updateHint();
+`;
+}
+
+$("btnHtml").addEventListener("click", () => {
+  if (!workflow) return setStatus("err", "Load a template first.");
+  if (!groups.filter(g => g.enabled).length) return setStatus("err", "Enable at least one form group.");
+  const html = generatedPage(schemaPayload());
+  const blob = new Blob([html], { type: "text/html" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = ($("outPrefix").value.trim() || "workflow") + "_frontend.html";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus("ok", "Frontend HTML downloaded (includes Grok / OpenAI / Ollama planner). Open it, enhance shots, download JSON.");
+});
+
+$("btnSchema").addEventListener("click", () => {
+  if (!workflow) return setStatus("err", "Load a template first.");
+  const blob = new Blob([JSON.stringify(schemaPayload(), null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = ($("outPrefix").value.trim() || "workflow") + "_fields.json";
+  a.click();
+});
+</script>
+</body>
+</html>
