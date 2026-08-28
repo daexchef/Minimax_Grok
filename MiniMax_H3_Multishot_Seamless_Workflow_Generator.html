@@ -87,6 +87,7 @@
       </div>
     </div>
     <p class="hint" id="lenHint">3 shots × 10.0 s · 243 frames/shot (17n+5 @ 24 fps)</p>
+    <p class="hint">Hard cap is <strong>8</strong> (H3MultishotMemorySampler). <code>H3 Shot List</code> widget max is <strong>3</strong> — the generator leaves that widget at <code>0</code> (count from <code>---</code>) so 4–8 shots do not trip “input out of range”.</p>
     <label>Start image (must exist in ComfyUI <code>input/</code>)</label>
     <input id="startImage" value="start_frame.png">
   </div>
@@ -199,7 +200,8 @@
     <ul class="tips">
       <li><strong>Not</strong> your clip-chain studio. One <code>H3MultishotMemorySampler</code> keeps a memory bank across shots.</li>
       <li>CLIP lives on <code>H3ClipLoaderAny</code> <em>inside</em> the Image-to-Video subgraph — that is why it is easy to miss on the canvas.</li>
-      <li>Needs custom nodes: <code>comfyui-h3-multishot</code>, Spectrum MiniMax H3, FreeMemory, KJNodes (SageAttention).</li>
+      <li>Needs custom nodes: <code>comfyui-h3-multishot</code>, Spectrum MiniMax H3, KJNodes (SageAttention on the <em>non-turbo</em> path).</li>
+      <li>96 GB graph: UNET → Sage CUDA → one Spectrum → sampler. Uses sampler <code>master_frames</code> (no second VAE decode).</li>
       <li>After download: Load Image filename must match a file already in ComfyUI <code>input/</code>.</li>
     </ul>
   </div>
@@ -1254,11 +1256,11 @@
               "Node name for S&R": "PathchSageAttentionKJ"
             },
             "widgets_values": [
-              "auto",
+              "sageattn_qk_int8_pv_fp16_cuda",
               false
             ],
             "widgets_values_named": {
-              "sage_attention": "auto",
+              "sage_attention": "sageattn_qk_int8_pv_fp16_cuda",
               "allow_compile": false
             }
           },
@@ -1289,7 +1291,9 @@
                 "localized_name": "MODEL",
                 "name": "MODEL",
                 "type": "MODEL",
-                "links": []
+                "links": [
+                  410
+                ]
               }
             ],
             "properties": {
@@ -1298,11 +1302,11 @@
               "Node name for S&R": "PathchSageAttentionKJ"
             },
             "widgets_values": [
-              "auto",
+              "sageattn_qk_int8_pv_fp16_cuda",
               false
             ],
             "widgets_values_named": {
-              "sage_attention": "auto",
+              "sage_attention": "sageattn_qk_int8_pv_fp16_cuda",
               "allow_compile": false
             }
           },
@@ -1579,8 +1583,7 @@
                 "type": "MODEL",
                 "links": [
                   229,
-                  360,
-                  410
+                  360
                 ]
               }
             ],
@@ -1725,7 +1728,9 @@
                 "name": "model",
                 "type": "MODEL",
                 "links": [
-                  411
+                  411,
+                  298,
+                  234
                 ]
               }
             ],
@@ -1990,7 +1995,9 @@
                 "localized_name": "master_frames",
                 "name": "master_frames",
                 "type": "IMAGE",
-                "links": []
+                "links": [
+                  547
+                ]
               },
               {
                 "localized_name": "master_audio",
@@ -2302,9 +2309,7 @@
                 "localized_name": "IMAGE",
                 "name": "IMAGE",
                 "type": "IMAGE",
-                "links": [
-                  547
-                ]
+                "links": []
               }
             ],
             "properties": {
@@ -2570,7 +2575,7 @@
           },
           {
             "id": 234,
-            "origin_id": 135,
+            "origin_id": 207,
             "origin_slot": 0,
             "target_id": 124,
             "target_slot": 0,
@@ -2650,7 +2655,7 @@
           },
           {
             "id": 298,
-            "origin_id": 135,
+            "origin_id": 207,
             "origin_slot": 0,
             "target_id": 168,
             "target_slot": 0,
@@ -2746,7 +2751,7 @@
           },
           {
             "id": 410,
-            "origin_id": 127,
+            "origin_id": 176,
             "origin_slot": 0,
             "target_id": 207,
             "target_slot": 0,
@@ -2810,7 +2815,7 @@
           },
           {
             "id": 547,
-            "origin_id": 234,
+            "origin_id": 168,
             "origin_slot": 0,
             "target_id": 130,
             "target_slot": 0,
@@ -2848,9 +2853,18 @@ function h3Frames(seconds, fps = 24) {
   return raw + add;
 }
 
+const MAX_SHOTS = 8;       // H3MultishotMemorySampler INT max
+const SPLIT_WIDGET_MAX = 3; // H3ScriptSplit / "H3 Shot List" widget max
+
+function clampShots(n) {
+  const x = Math.max(1, parseInt(n, 10) || 1);
+  return Math.min(MAX_SHOTS, x);
+}
+
 function perShotSeconds() {
   const total = parseFloat($("duration").value) || 30;
-  const n = Math.max(1, parseInt($("shotCount").value, 10) || 1);
+  const n = clampShots($("shotCount").value);
+  if (String($("shotCount").value) !== String(n)) $("shotCount").value = String(n);
   return { total, n, per: total / n, frames: h3Frames(total / n) };
 }
 
@@ -3036,16 +3050,17 @@ function patchWorkflow(template, shots, cfg) {
       node.mode = turbo ? 0 : 4;
     }
     if (node.type === "H3ScriptSplit") {
+      // Widget max is 3. 0 = parse --- blocks (output INT can still be 4–8).
       setWidget(node, "script", dashScript);
-      setWidget(node, "shot_count", n);
+      setWidget(node, "shot_count", 0);
       if (node.widgets_values) {
         node.widgets_values[0] = dashScript;
-        node.widgets_values[1] = n;
+        node.widgets_values[1] = 0;
       }
     }
     if (node.type === "H3MultishotMemorySampler") {
       setWidget(node, "script", dashScript);
-      setWidget(node, "shot_count", n);
+      setWidget(node, "shot_count", Math.min(MAX_SHOTS, n));
       setWidget(node, "width", cfg.width);
       setWidget(node, "height", cfg.height);
       setWidget(node, "frames_per_shot", frames);
@@ -3055,6 +3070,14 @@ function patchWorkflow(template, shots, cfg) {
     }
     if (node.type === "BasicScheduler") {
       setWidget(node, "steps", Math.max(4, cfg.steps));
+    }
+    if (node.type === "PathchSageAttentionKJ") {
+      setWidget(node, "sage_attention", "sageattn_qk_int8_pv_fp16_cuda");
+      setWidget(node, "allow_compile", false);
+      if (node.widgets_values) {
+        node.widgets_values[0] = "sageattn_qk_int8_pv_fp16_cuda";
+        node.widgets_values[1] = false;
+      }
     }
     if (node.type === "PrimitiveBoolean") {
       const lab = (node.title || "").toLowerCase();
@@ -3157,8 +3180,14 @@ $("btnGenerate").addEventListener("click", () => {
   } catch (e) {
     return setStatus("error", "Embedded v13 template is missing or invalid.");
   }
-  const shots = collectShots();
+  let shots = collectShots();
   if (!shots.length) return setStatus("error", "Generate or paste at least one shot.");
+  if (shots.length > MAX_SHOTS) {
+    shots = shots.slice(0, MAX_SHOTS);
+    $("shotCount").value = String(MAX_SHOTS);
+    renderShots(shots);
+    updateHint();
+  }
   const { total } = perShotSeconds();
   const wf = patchWorkflow(template, shots, {
     total,
