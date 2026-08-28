@@ -1,6 +1,8 @@
 # MiniMax Grok – Long Video Workflow Toolkit
-https://runpod.io?ref=8qd71bq0
 **Python → Browser → Grok CLI / ComfyUI MCP**
+
+https://runpod.io?ref=8qd71bq0
+
 
 A progressive toolkit for generating long, seamless MiniMax H3 (and LTX-2.5) videos in ComfyUI.
 
