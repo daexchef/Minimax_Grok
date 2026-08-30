@@ -35,6 +35,22 @@ See **[COMPARISON.md](COMPARISON.md)** for the side-by-side matrix vs Continuum,
 
 ---
 
+## Official H3 planner grammar (QA)
+
+Planner output now includes a **cast bible** plus official MiniMax H3 field order inside each `segment.prompt`:
+
+`subject_definitions` → `summary` → `retention_analysis` → `action` → `overall_soundscape` → `non_diegetic_music` → `tracking/camera notes`
+
+Subjects stay locked with `<Subject N>`. Spoken lines (only if needed) use:
+
+`<Subject N> (SN) [emotion] says: <d>[Language] "..."</d>`
+
+The ComfyUI graph builder is unchanged. It still reads `segments[].prompt` and `approx_seconds`.
+
+See [`PLANNER_SCHEMA.md`](PLANNER_SCHEMA.md) and [`PromptGen.md`](PromptGen.md).
+
+---
+
 ## 1. Browser frontends (recommended for most users)
 
 All HTML files are **single-file, zero-install**. Open in Chrome / Edge / Firefox.
@@ -43,7 +59,7 @@ All HTML files are **single-file, zero-install**. Open in Chrome / Edge / Firefo
 
 | File | Purpose |
 |------|---------|
-| [`MiniMax_H3_Long_Workflow_Generator.html`](MiniMax_H3_Long_Workflow_Generator.html) | Classic last-frame chaining + local/LLM segment planner + full graph emission |
+| [`MiniMax_H3_Long_Workflow_Generator.html`](MiniMax_H3_Long_Workflow_Generator.html) | Classic last-frame chaining + official H3 planner grammar + full graph emission |
 | [`MiniMax_H3_Multishot_Seamless_Workflow_Generator.html`](MiniMax_H3_Multishot_Seamless_Workflow_Generator.html) | Builds Joey Gambino’s `minimaxH330SecondSeamless_v13` graph (H3MultishotMemorySampler + script slots) |
 | [`MiniMax_H3_Local_VRAM_Workflow_Generator.html`](MiniMax_H3_Local_VRAM_Workflow_Generator.html) | Local GPU: probe Comfy VRAM → 0.2–0.4 MP canvas + clip length; step sweep 20/16/12/8 for quality tests |
 | [`MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html`](MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html) | RunPod RTX PRO 6000 (96 GB): 1344×768, 25 steps, unpruned INT8 |
@@ -54,7 +70,7 @@ All HTML files are **single-file, zero-install**. Open in Chrome / Edge / Firefo
 ### Typical browser flow
 1. Open the HTML of choice.
 2. Enter idea + total duration + target clip length.
-3. Generate segments (local continuity-aware or via Grok / OpenAI / Ollama).
+3. Generate segments (local official-H3 grammar or via Grok / OpenAI / Ollama).
 4. Choose T2V / I2V, steps, resolution.
 5. Download the ready-to-queue `.json`.
 6. Drag into ComfyUI → confirm start image (I2V) → Queue.
@@ -72,7 +88,7 @@ python generate_h3_long_workflow.py \
   --steps 8
 ```
 
-See the original planner system prompt in [`PromptGen.md`](PromptGen.md) and example [`segments.json`](segments.json).
+See the planner system prompt in [`PromptGen.md`](PromptGen.md), the JSON contract in [`PLANNER_SCHEMA.md`](PLANNER_SCHEMA.md), and example [`segments.json`](segments.json).
 
 The browser tools emit the **exact same node graph** that the Python script produces (shared loaders, EasyCache, PathchSageAttentionKJ, last-frame hand-off, duplicate-frame trim, final ImageBatch + AudioConcat).
 
@@ -143,7 +159,7 @@ Must already look like the first frame of segment 1 (same character, wardrobe, f
 | Shorter draft res | Large | Iterate 480–640p → final 768×1344 |
 
 **Continuity methods currently supported**
-- Last-frame + aggressive continuity language (stock, works everywhere)
+- Last-frame + official H3 grammar / cast bible (stock, works everywhere)
 - H3 Multishot Memory Sampler (memory + anchor frames)
 - H3 Motion Context / Extender (latent tail + audio context) – best seams when the custom nodes are installed
 
@@ -161,6 +177,7 @@ Long_Video_Workflow_Studio.html
 LTX_2_5_Long_Workflow_Generator.html
 ComfyUI_Template_Frontend_Builder.html
 COMPARISON.md                         # vs Continuum / Joey / ChainDirector / FlowDirector
+PLANNER_SCHEMA.md                     # Official H3 planner JSON contract
 PromptGen.md
 segments.json
 skills.zip                            # Grok CLI / MCP skill package
@@ -173,7 +190,7 @@ docs/                                 # UI screenshots
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Identity jump between clips | Weak continuity language or mismatched start frame | Use the local generators (they inject strong “Continue seamlessly…” language) |
+| Identity jump between clips | Weak continuity language or mismatched start frame | Use the local generators (they inject official H3 fields + Continue seamlessly…) |
 | OOM | Segment too long / resolution too high | Shorten target clip or lower resolution |
 | Model not found | Filename mismatch | Check exact names in your `models/` folders |
 | Multishot subgraph ignores prompts | Script slots not filled | Use the Multishot generator or Template Frontend Builder – they write both outer `{"prompts":[]}` and the internal `---` scripts |
