@@ -27,6 +27,16 @@ A progressive toolkit for generating long, seamless MiniMax H3 (and LTX-2.5) vid
 
 ---
 
+## How this compares
+
+Most H3 “long video” tools are **custom nodes**. You load *their* example JSON and the node chains clips at runtime (Joey Multishot, Continuum, ChainDirector, FlowDirector).
+
+This repo is the other half: **idea + duration in a browser (or Python) → a complete ComfyUI JSON** with segment prompts, last-frame (or multishot / motion-context) wiring, and concat already in the graph.
+
+See **[COMPARISON.md](COMPARISON.md)** for the side-by-side matrix vs Continuum, Joey Multishot, ChainDirector, and FlowDirector — including when to use which.
+
+---
+
 ## 1. Browser frontends (recommended for most users)
 
 All HTML files are **single-file, zero-install**. Open in Chrome / Edge / Firefox.
@@ -37,6 +47,8 @@ All HTML files are **single-file, zero-install**. Open in Chrome / Edge / Firefo
 |------|---------|
 | [`MiniMax_H3_Long_Workflow_Generator.html`](MiniMax_H3_Long_Workflow_Generator.html) | Classic last-frame chaining + local/LLM segment planner + full graph emission |
 | [`MiniMax_H3_Multishot_Seamless_Workflow_Generator.html`](MiniMax_H3_Multishot_Seamless_Workflow_Generator.html) | Builds Joey Gambino’s `minimaxH330SecondSeamless_v13` graph (H3MultishotMemorySampler + script slots) |
+| [`MiniMax_H3_Local_VRAM_Workflow_Generator.html`](MiniMax_H3_Local_VRAM_Workflow_Generator.html) | Local GPU: probe Comfy VRAM → 0.2–0.4 MP canvas + clip length; step sweep 20/16/12/8 for quality tests |
+| [`MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html`](MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html) | RunPod RTX PRO 6000 (96 GB): 1344×768, 25 steps, unpruned INT8 |
 | [`Long_Video_Workflow_Studio.html`](Long_Video_Workflow_Studio.html) | All-in-one studio: H3 smooth / turbo / Motion Context + LTX-2.5 two-stage, HF model download helpers, research notes |
 | [`LTX_2_5_Long_Workflow_Generator.html`](LTX_2_5_Long_Workflow_Generator.html) | Dedicated LTX-2.5 long-chain generator |
 | [`ComfyUI_Template_Frontend_Builder.html`](ComfyUI_Template_Frontend_Builder.html) | Meta-tool: drop any ComfyUI workflow JSON → get a tailored HTML director UI with LLM planner |
@@ -145,9 +157,12 @@ Must already look like the first frame of segment 1 (same character, wardrobe, f
 generate_h3_long_workflow.py          # Core Python generator
 MiniMax_H3_Long_Workflow_Generator.html
 MiniMax_H3_Multishot_Seamless_Workflow_Generator.html
+MiniMax_H3_Local_VRAM_Workflow_Generator.html
+MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html
 Long_Video_Workflow_Studio.html
 LTX_2_5_Long_Workflow_Generator.html
 ComfyUI_Template_Frontend_Builder.html
+COMPARISON.md                         # vs Continuum / Joey / ChainDirector / FlowDirector
 PromptGen.md
 segments.json
 skills.zip                            # Grok CLI / MCP skill package
