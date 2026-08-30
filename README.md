@@ -25,6 +25,16 @@ A progressive toolkit for generating long, seamless MiniMax H3 (and LTX-2.5) vid
 
 ---
 
+## How this compares
+
+Most H3 “long video” tools are **custom nodes**. You load *their* example JSON and the node chains clips at runtime (Joey Multishot, Continuum, ChainDirector, FlowDirector).
+
+This repo is the other half: **idea + duration in a browser (or Python) → a complete ComfyUI JSON** with segment prompts, last-frame (or multishot / motion-context) wiring, and concat already in the graph.
+
+See **[COMPARISON.md](COMPARISON.md)** for the side-by-side matrix vs Continuum, Joey Multishot, ChainDirector, and FlowDirector — including when to use which.
+
+---
+
 ## 1. Browser frontends (recommended for most users)
 
 All HTML files are **single-file, zero-install**. Open in Chrome / Edge / Firefox.
@@ -145,9 +155,12 @@ Must already look like the first frame of segment 1 (same character, wardrobe, f
 generate_h3_long_workflow.py          # Core Python generator
 MiniMax_H3_Long_Workflow_Generator.html
 MiniMax_H3_Multishot_Seamless_Workflow_Generator.html
+MiniMax_H3_Local_VRAM_Workflow_Generator.html
+MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html
 Long_Video_Workflow_Studio.html
 LTX_2_5_Long_Workflow_Generator.html
 ComfyUI_Template_Frontend_Builder.html
+COMPARISON.md                         # vs Continuum / Joey / ChainDirector / FlowDirector
 PromptGen.md
 segments.json
 skills.zip                            # Grok CLI / MCP skill package
