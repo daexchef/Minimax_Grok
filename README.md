@@ -6,6 +6,8 @@ https://runpod.io?ref=8qd71bq0
 
 A progressive toolkit for generating long, seamless MiniMax H3 (and LTX-2.5) videos in ComfyUI.
 
+**Master Grok Bot:** read [`docs/MASTER_BOT_BRIEFING_2026-09-01.md`](docs/MASTER_BOT_BRIEFING_2026-09-01.md) before planning or generating 30 s H3 jobs on an RTX PRO 6000. That file is standing doctrine (timings, three-graph stack, draft-then-chain-then-upscale recipe).
+
 | Stage | What you get |
 |-------|--------------|
 | 1. Python | Core dynamic workflow generator (`generate_h3_long_workflow.py`) |
@@ -24,6 +26,7 @@ A progressive toolkit for generating long, seamless MiniMax H3 (and LTX-2.5) vid
 | Turn *any* existing ComfyUI workflow into a director UI | `ComfyUI_Template_Frontend_Builder.html` |
 | Scripting / automation / CI | `generate_h3_long_workflow.py` |
 | Talk to Grok and have it drive ComfyUI | Unzip + install `skills.zip` (see section 3) |
+| Agent / Master Bot 30 s PRO 6000 plan | [`docs/MASTER_BOT_BRIEFING_2026-09-01.md`](docs/MASTER_BOT_BRIEFING_2026-09-01.md) |
 
 ---
 
@@ -48,7 +51,7 @@ All HTML files are **single-file, zero-install**. Open in Chrome / Edge / Firefo
 | [`MiniMax_H3_Long_Workflow_Generator.html`](MiniMax_H3_Long_Workflow_Generator.html) | Classic last-frame chaining + local/LLM segment planner + full graph emission |
 | [`MiniMax_H3_Multishot_Seamless_Workflow_Generator.html`](MiniMax_H3_Multishot_Seamless_Workflow_Generator.html) | Builds Joey Gambino’s `minimaxH330SecondSeamless_v13` graph (H3MultishotMemorySampler + script slots) |
 | [`MiniMax_H3_Local_VRAM_Workflow_Generator.html`](MiniMax_H3_Local_VRAM_Workflow_Generator.html) | Local GPU: probe Comfy VRAM → 0.2–0.4 MP canvas + clip length; step sweep 20/16/12/8 for quality tests |
-| [`MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html`](MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html) | RunPod RTX PRO 6000 (96 GB): 1344×768, 25 steps, unpruned INT8 |
+| [`MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html`](MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html) | RunPod RTX PRO 6000 (96 GB): 1344×768, 25 steps, unpruned INT8. **Hero path only — not for prompt iteration.** |
 | [`Long_Video_Workflow_Studio.html`](Long_Video_Workflow_Studio.html) | All-in-one studio: H3 smooth / turbo / Motion Context + LTX-2.5 two-stage, HF model download helpers, research notes |
 | [`LTX_2_5_Long_Workflow_Generator.html`](LTX_2_5_Long_Workflow_Generator.html) | Dedicated LTX-2.5 long-chain generator |
 | [`ComfyUI_Template_Frontend_Builder.html`](ComfyUI_Template_Frontend_Builder.html) | Meta-tool: drop any ComfyUI workflow JSON → get a tailored HTML director UI with LLM planner |
@@ -166,7 +169,7 @@ COMPARISON.md                         # vs Continuum / Joey / ChainDirector / Fl
 PromptGen.md
 segments.json
 skills.zip                            # Grok CLI / MCP skill package
-docs/                                 # UI screenshots
+docs/                                 # UI screenshots + Master Bot briefing
 ```
 
 ---
