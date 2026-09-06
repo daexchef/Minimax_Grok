@@ -63,7 +63,7 @@ All HTML files are **single-file, zero-install**. Open in Chrome / Edge / Firefo
 | [`MiniMax_H3_Multishot_Seamless_Workflow_Generator.html`](MiniMax_H3_Multishot_Seamless_Workflow_Generator.html) | Builds Joey Gambino’s `minimaxH330SecondSeamless_v13` graph (H3MultishotMemorySampler + script slots) |
 | [`MiniMax_H3_Local_VRAM_Workflow_Generator.html`](MiniMax_H3_Local_VRAM_Workflow_Generator.html) | Local GPU: probe Comfy VRAM → 0.2–0.4 MP canvas + clip length; step sweep 20/16/12/8 for quality tests |
 | [`MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html`](MiniMax_H3_PRO6000_Cinematic_Workflow_Generator.html) | RunPod RTX PRO 6000 (96 GB): 1344×768, 25 steps, unpruned INT8 |
-| [`Long_Video_Workflow_Studio.html`](Long_Video_Workflow_Studio.html) | All-in-one studio: H3 smooth / turbo / Motion Context + LTX-2.5 two-stage, HF model download helpers, research notes |
+| [`Long_Video_Workflow_Studio.html`](Long_Video_Workflow_Studio.html) | All-in-one studio: H3 smooth / turbo / **SLA turbo** / Motion Context + LTX-2.5 two-stage, HF model download helpers, research notes |
 | [`LTX_2_5_Long_Workflow_Generator.html`](LTX_2_5_Long_Workflow_Generator.html) | Dedicated LTX-2.5 long-chain generator |
 | [`ComfyUI_Template_Frontend_Builder.html`](ComfyUI_Template_Frontend_Builder.html) | Meta-tool: drop any ComfyUI workflow JSON → get a tailored HTML director UI with LLM planner |
 
@@ -71,7 +71,7 @@ All HTML files are **single-file, zero-install**. Open in Chrome / Edge / Firefo
 1. Open the HTML of choice.
 2. Enter idea + total duration + target clip length.
 3. Generate segments (local official-H3 grammar or via Grok / OpenAI / Ollama).
-4. Choose T2V / I2V, steps, resolution.
+4. Choose T2V / I2V, steps, resolution. For the LightX2V SLA draft path, pick **SLA turbo** (Studio engine or Speed path). Leave the Sage / EasyCache path selected for previous behavior.
 5. Download the ready-to-queue `.json`.
 6. Drag into ComfyUI → confirm start image (I2V) → Queue.
 
@@ -86,11 +86,17 @@ python generate_h3_long_workflow.py \
   --start-image start_frame.png \
   --width 768 --height 1344 \
   --steps 8
+
+# Alternate SLA turbo path (no EasyCache / PathchSage):
+python generate_h3_long_workflow.py \
+  --segments segments.json \
+  --sla \
+  --output minimax_long_60s_sla.json
 ```
 
 See the planner system prompt in [`PromptGen.md`](PromptGen.md), the JSON contract in [`PLANNER_SCHEMA.md`](PLANNER_SCHEMA.md), and example [`segments.json`](segments.json).
 
-The browser tools emit the **exact same node graph** that the Python script produces (shared loaders, EasyCache, PathchSageAttentionKJ, last-frame hand-off, duplicate-frame trim, final ImageBatch + AudioConcat).
+The browser tools emit the **same last-frame join graph** as the Python script (shared loaders, last-frame hand-off, duplicate-frame trim, final ImageBatch + AudioConcat). The default speed stack is EasyCache → PathchSageAttentionKJ. **SLA turbo** is an alternate MODEL line (UNET → SLA LoRA → H3SLAAttention) and is not stacked with Sage Pathch, EasyCache, or PDD Acc.
 
 ---
 
@@ -121,7 +127,8 @@ Once loaded, you can ask Grok to plan segments, generate the workflow JSON, or d
 ## Prerequisites (ComfyUI)
 
 ### Required custom nodes
-- **KJNodes** (PathchSageAttentionKJ)
+- **KJNodes** (PathchSageAttentionKJ) — default Sage speed path
+- For **SLA turbo**: [ComfyUI-PlagueKind-Nodes](https://github.com/PlagueKind/ComfyUI-PlagueKind-Nodes) (`ComfyUI-H3-SLA-Attention` folder). Node class `H3SLAAttention` / display **H3 SLA Attention**.
 - For multishot path: `comfyui-h3-multishot` (+ Spectrum MiniMax H3 recommended)
 - Optional but recommended: `ComfyUI-H3-Motion-Context` or `ComfyUI_MiniMax_H3_Extender` for true latent/motion continuity
 
@@ -138,10 +145,16 @@ models/vae/
   minimax_h3_audio_vae_fp32.safetensors
 ```
 
-Turbo LoRA (optional, 6–8 steps):
+Turbo LoRA (optional, 6–8 steps, Sage path):
 ```
 models/loras/
   minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+```
+
+SLA turbo LoRA (optional, 4–6 steps, SLA path only — [LightX2V MiniMax-H3 Turbo-SLA](https://huggingface.co/lightx2v/Minimax-h3-Turbo-SLA)):
+```
+models/loras/
+  minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors
 ```
 
 ### Start image (I2V)
@@ -153,10 +166,20 @@ Must already look like the first frame of segment 1 (same character, wardrobe, f
 
 | Lever | Typical gain | Notes |
 |-------|--------------|-------|
-| Turbo LoRA (v4 / EMA) | 3–5× | Drop steps to 6–8 |
-| SageAttention / PathchSageAttentionKJ | 1.5–2× | Already wired in generated graphs |
-| EasyCache | +10–30 % | Already present |
+| Turbo LoRA (v4 / EMA) | 3–5× | Drop steps to 6–8 on the Sage path |
+| SageAttention / PathchSageAttentionKJ | 1.5–2× | Default emitted graphs (off when SLA is on) |
+| EasyCache | +10–30 % | Default emitted graphs (off when SLA is on) |
+| **SLA turbo** (alternate) | LightX2V reports ~2.5× on RTX 5090 in their LightX2V setup; PlagueKind measured 1.4–1.75× e2e on a 5090 at 768p/15s | UNET → SLA 4-step LoRA → H3SLAAttention. **Not stacked** with Sage Pathch, EasyCache, or PDD Acc. Defaults: 6 steps (4 matches distill; 6 is better for speech), sparsity 0.85, `block_size` 64, `protect_audio` on, `dense_backend` `comfy_kitchen`. |
 | Shorter draft res | Large | Iterate 480–640p → final 768×1344 |
+
+**How to enable SLA turbo**
+- Studio: Engine → **MiniMax H3 · SLA turbo**
+- Long / Local VRAM / Multishot / PRO 6000 generators: Speed path → **SLA turbo**
+- Python: `--sla` (optional `--sla-sparsity`, `--sla-block-size`, `--sla-lora`)
+
+The LoRA only teaches the model to tolerate sparse attention. Without the PlagueKind `H3SLAAttention` node, the SLA LoRA does not speed anything up.
+
+Joey / Multishot / Local VRAM / PRO 6000 templates keep Spectrum after the attention node (it already sat after Sage). SLA replaces PathchSage on that wire; it does not add or remove Spectrum.
 
 **Continuity methods currently supported**
 - Last-frame + official H3 grammar / cast bible (stock, works everywhere)
