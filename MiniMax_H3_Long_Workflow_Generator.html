@@ -320,7 +320,7 @@ function toggleSpeedUI(adjustSteps) {
   $("slaHint").classList.toggle("hidden", !sla);
   $("speedHint").classList.toggle("hidden", sla);
   if (adjustSteps) {
-    if (sla && Number($("steps").value) > 8) $("steps").value = 6;
+    if (sla) $("steps").value = 6;
     if (!sla && Number($("steps").value) < 8) $("steps").value = 8;
   }
 }
