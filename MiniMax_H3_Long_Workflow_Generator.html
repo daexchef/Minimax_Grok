@@ -103,6 +103,7 @@
   }
   .tips-list li { margin-bottom: 7px; }
   .tips-list strong { color: var(--text); }
+  .hidden { display: none; }
   .speed-note {
     background: #1c2433;
     border-left: 3px solid var(--accent);
@@ -201,7 +202,13 @@
         <input type="number" id="steps" value="8" min="4" max="30">
       </div>
     </div>
-    <p class="hint">Tip: With a Turbo LoRA use 6–8 steps for 3–5× speed. Base model without LoRA usually needs 16–20.</p>
+    <label>Speed path</label>
+    <select id="speedPath">
+      <option value="sage" selected>Sage / EasyCache (default)</option>
+      <option value="sla">SLA turbo — 4-step LoRA + H3SLAAttention</option>
+    </select>
+    <p class="hint" id="speedHint">Tip: With a Turbo LoRA use 6–8 steps for 3–5× speed. Base model without LoRA usually needs 16–20.</p>
+    <p class="hint hidden" id="slaHint">SLA is an alternate draft path, not stacked with Sage Pathch, EasyCache, or PDD Acc. Needs <a href="https://github.com/PlagueKind/ComfyUI-PlagueKind-Nodes" target="_blank" rel="noopener">ComfyUI-PlagueKind-Nodes</a> and <code>minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors</code> in <code>models/loras/</code>. 6 steps is better for speech; 4 matches the LightX2V distill.</p>
 
     <details>
       <summary>Advanced model names</summary>
@@ -251,7 +258,8 @@
     <ul class="tips-list">
       <li><strong>Current chaining</strong> uses last-frame → first-frame + strong continuity language in every prompt. This is solid and already implemented in the generated workflow (duplicate first frames are trimmed, video + audio are concatenated).</li>
       <li><strong>For truly seamless motion & audio</strong> across many short clips, install <code>ComfyUI-H3-Project-Suite</code> or <code>ComfyUI_MiniMax_H3_Extender</code> and later swap the hand-off to latent / motion-context mode. The generator structure supports that upgrade.</li>
-      <li><strong>Speed stack (recommended)</strong>: keep SageAttention + EasyCache (already in the workflow) → add a Turbo LoRA (v4 / EMA preferred) → set Steps to 6–8. Community reports 3–5× wall-clock reduction with usable quality.</li>
+      <li><strong>Speed stack (Sage path)</strong>: keep SageAttention + EasyCache (already in the workflow) → add a Turbo LoRA (v4 / EMA preferred) → set Steps to 6–8. Community reports 3–5× wall-clock reduction with usable quality.</li>
+      <li><strong>SLA turbo (alternate)</strong>: choose Speed path → SLA turbo. Graph becomes UNET → SLA 4-step LoRA → H3SLAAttention → sampler. Do not also load PathchSageAttentionKJ or PDD Acc. Install PlagueKind H3-SLA-Attention + the LightX2V ComfyUI SLA LoRA first.</li>
       <li><strong>4-second clips</strong> give tight narrative control (15 joins on a 60 s video) but increase the number of potential soft resets. 6–10 s is often a better continuity/speed compromise unless you specifically need rapid cuts.</li>
       <li><strong>Start image</strong> (I2V mode) must closely match the first segment’s character, clothing, environment and framing for best results.</li>
     </ul>
@@ -277,8 +285,10 @@ function loadSettings() {
   if (s.genMode) $("genMode").value = s.genMode;
   if (s.steps) $("steps").value = s.steps;
   if (s.segLen) $("segLen").value = s.segLen;
+  if (s.speedPath) $("speedPath").value = s.speedPath;
   toggleProviderUI();
   toggleModeUI();
+  toggleSpeedUI(false);
   updateClipCalc();
   updatePlanButton();
 }
@@ -291,7 +301,8 @@ function saveSettings() {
     ollamaModel: $("ollamaModel").value,
     genMode: $("genMode").value,
     steps: $("steps").value,
-    segLen: $("segLen").value
+    segLen: $("segLen").value,
+    speedPath: $("speedPath").value
   }));
 }
 
@@ -302,6 +313,17 @@ $("modelName").addEventListener("change", saveSettings);
 $("duration").addEventListener("input", updateClipCalc);
 $("segLen").addEventListener("input", () => { updateClipCalc(); saveSettings(); });
 $("steps").addEventListener("change", saveSettings);
+$("speedPath").addEventListener("change", () => { toggleSpeedUI(true); saveSettings(); });
+
+function toggleSpeedUI(adjustSteps) {
+  const sla = $("speedPath").value === "sla";
+  $("slaHint").classList.toggle("hidden", !sla);
+  $("speedHint").classList.toggle("hidden", sla);
+  if (adjustSteps) {
+    if (sla && Number($("steps").value) > 8) $("steps").value = 6;
+    if (!sla && Number($("steps").value) < 8) $("steps").value = 8;
+  }
+}
 
 function toggleProviderUI() {
   const p = $("provider").value;
@@ -581,25 +603,52 @@ function buildWorkflow(segments, config) {
     outputs: [{ name: "VAE", type: "VAE", links: [] }]
   });
 
-  const easyId = b.addNode("EasyCache", "EasyCache", [-1700, -100], {
-    size: [320, 140],
-    widgets_values: [0.3, 0.2, 0.9, false],
-    widgets_values_named: { reuse_threshold: 0.3, start_percent: 0.2, end_percent: 0.9, verbose: false },
-    inputs: [{ name: "model", type: "MODEL", link: null }],
-    outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
-    properties: { cnr_id: "comfy-core", ver: "0.30.0", "Node name for S&R": "EasyCache" }
-  });
-  b.link(unetId, 0, easyId, 0, "MODEL");
+  let modelId;
+  if (config.sla) {
+    const slaLora = config.slaLoraName || "minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors";
+    const loraId = b.addNode("LoraLoaderModelOnly", "SLA 4-step LoRA", [-1700, -100], {
+      size: [420, 130],
+      widgets_values: [slaLora, 1],
+      widgets_values_named: { lora_name: slaLora, strength_model: 1 },
+      inputs: [{ name: "model", type: "MODEL", link: null }],
+      outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
+      properties: { cnr_id: "comfy-core", ver: "0.33.0", "Node name for S&R": "LoraLoaderModelOnly" }
+    });
+    b.link(unetId, 0, loraId, 0, "MODEL");
+    modelId = b.addNode("H3SLAAttention", "H3 SLA Attention", [-1300, -80], {
+      size: [340, 360],
+      widgets_values: [0.85, "64", 8192, 1, true, true, "0", "comfy_kitchen", true, false, "Off"],
+      widgets_values_named: {
+        sparsity_ratio: 0.85, block_size: "64", min_seq_len: 8192, dense_last_steps: 1,
+        protect_audio: true, enabled: true, dense_steps: "0", dense_backend: "comfy_kitchen",
+        disable_fp16_accum: true, stabilize_motion: false, reference_protection: "Off"
+      },
+      inputs: [{ name: "model", type: "MODEL", link: null }],
+      outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
+      properties: { cnr_id: "comfyui-plaguekind-nodes", ver: "1.4.4", "Node name for S&R": "H3SLAAttention" }
+    });
+    b.link(loraId, 0, modelId, 0, "MODEL");
+  } else {
+    const easyId = b.addNode("EasyCache", "EasyCache", [-1700, -100], {
+      size: [320, 140],
+      widgets_values: [0.3, 0.2, 0.9, false],
+      widgets_values_named: { reuse_threshold: 0.3, start_percent: 0.2, end_percent: 0.9, verbose: false },
+      inputs: [{ name: "model", type: "MODEL", link: null }],
+      outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
+      properties: { cnr_id: "comfy-core", ver: "0.30.0", "Node name for S&R": "EasyCache" }
+    });
+    b.link(unetId, 0, easyId, 0, "MODEL");
 
-  const sageId = b.addNode("PathchSageAttentionKJ", "Sage Attention", [-1300, -80], {
-    size: [280, 90],
-    widgets_values: ["auto", false],
-    widgets_values_named: { sage_attention: "auto", allow_compile: false },
-    inputs: [{ name: "model", type: "MODEL", link: null }],
-    outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
-    properties: { cnr_id: "comfyui-workflow-encrypt", ver: "1.0.0", "Node name for S&R": "PathchSageAttentionKJ" }
-  });
-  b.link(easyId, 0, sageId, 0, "MODEL");
+    modelId = b.addNode("PathchSageAttentionKJ", "Sage Attention", [-1300, -80], {
+      size: [280, 90],
+      widgets_values: ["auto", false],
+      widgets_values_named: { sage_attention: "auto", allow_compile: false },
+      inputs: [{ name: "model", type: "MODEL", link: null }],
+      outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
+      properties: { cnr_id: "comfyui-workflow-encrypt", ver: "1.0.0", "Node name for S&R": "PathchSageAttentionKJ" }
+    });
+    b.link(easyId, 0, modelId, 0, "MODEL");
+  }
 
   // Only create LoadImage when in I2V mode
   let startImgId = null;
@@ -690,7 +739,7 @@ function buildWorkflow(segments, config) {
       ],
       outputs: [{ name: "GUIDER", type: "GUIDER", links: [] }]
     });
-    b.link(sageId, 0, guiderId, 0, "MODEL");
+    b.link(modelId, 0, guiderId, 0, "MODEL");
     b.link(condId, 0, guiderId, 1, "CONDITIONING");
 
     const schedId = b.addNode("BasicScheduler", `Scheduler ${idx}`, [x, 500], {
@@ -702,7 +751,7 @@ function buildWorkflow(segments, config) {
       ],
       outputs: [{ name: "SIGMAS", type: "SIGMAS", links: [] }]
     });
-    b.link(sageId, 0, schedId, 0, "MODEL");
+    b.link(modelId, 0, schedId, 0, "MODEL");
     b.link(stepsId, 0, schedId, 1, "INT");
 
     const samplerId = b.addNode("SamplerCustomAdvanced", `Sampler ${idx}`, [x, 650], {
@@ -972,7 +1021,8 @@ $("btnGenerate").addEventListener("click", () => {
     videoVae: $("videoVae").value,
     audioVae: $("audioVae").value,
     baseSeed: 144012845932748,
-    targetSegmentSeconds: parseFloat($("segLen").value) || 4
+    targetSegmentSeconds: parseFloat($("segLen").value) || 4,
+    sla: $("speedPath").value === "sla"
   };
 
   showStatus("Building workflow…", "info");
@@ -982,7 +1032,8 @@ $("btnGenerate").addEventListener("click", () => {
   a.href = URL.createObjectURL(blob);
   a.download = `minimax_long_${plan.segments.length}x_${mode}.json`;
   a.click();
-  showStatus(`Downloaded workflow (${doc.last_node_id} nodes, ${doc.last_link_id} links) – ${mode.toUpperCase()} • last-frame chaining + continuity prompts ready`, "success");
+  const speedLabel = config.sla ? "SLA turbo" : "Sage/EasyCache";
+  showStatus(`Downloaded workflow (${doc.last_node_id} nodes, ${doc.last_link_id} links) – ${mode.toUpperCase()} • ${speedLabel} • last-frame chaining + continuity prompts ready`, "success");
 });
 
 $("btnDownloadSeg").addEventListener("click", () => {

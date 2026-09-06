@@ -7,6 +7,7 @@ Hybrid dynamic MiniMax H3 long-video workflow generator.
 Usage:
   python generate_h3_long_workflow.py --segments segments.json --output long_60s.json
   python generate_h3_long_workflow.py --prompts-file prompts.txt --duration 40 --output test.json
+  python generate_h3_long_workflow.py --segments segments.json --sla --output long_60s_sla.json
 """
 
 import json
@@ -35,6 +36,23 @@ DEFAULTS = {
     "filename_prefix": "video/MiniMax_H3_Long",
     "seed_mode": "fixed",
     "base_seed": 144012845932748,
+    "sla": False,
+    "sla_lora_name": "minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors",
+    "sla_lora_strength": 1.0,
+    "sla_sparsity": 0.85,
+    "sla_block_size": "64",
+    "sla_dense_backend": "comfy_kitchen",
+}
+
+# LightX2V SLA 4-step distill; PlagueKind recommends 6+ steps when speech matters.
+SLA_DEFAULT_STEPS = 6
+
+# H3SLAAttention widgets match PlagueKind ComfyUI-H3-SLA-Attention/sla_node.py
+# INPUT_TYPES order (required then optional, as stored positionally).
+SLA_NODE_PROPERTIES = {
+    "cnr_id": "comfyui-plaguekind-nodes",
+    "ver": "1.4.4",
+    "Node name for S&R": "H3SLAAttention",
 }
 
 # ---------------------------------------------------------------------------
@@ -49,6 +67,40 @@ def h3_valid_length(seconds: float, fps: int = 24) -> int:
 
 def seconds_from_length(length: int, fps: int = 24) -> float:
     return length / fps
+
+
+def sla_attention_widgets(config: Dict[str, Any]) -> tuple:
+    """Return (widgets_values, widgets_values_named) for H3SLAAttention."""
+    sparsity = float(config.get("sla_sparsity", 0.85))
+    block_size = str(config.get("sla_block_size", "64"))
+    backend = str(config.get("sla_dense_backend", "comfy_kitchen"))
+    named = {
+        "sparsity_ratio": sparsity,
+        "block_size": block_size,
+        "min_seq_len": 8192,
+        "dense_last_steps": 1,
+        "protect_audio": True,
+        "enabled": True,
+        "dense_steps": "0",
+        "dense_backend": backend,
+        "disable_fp16_accum": True,
+        "stabilize_motion": False,
+        "reference_protection": "Off",
+    }
+    values = [
+        named["sparsity_ratio"],
+        named["block_size"],
+        named["min_seq_len"],
+        named["dense_last_steps"],
+        named["protect_audio"],
+        named["enabled"],
+        named["dense_steps"],
+        named["dense_backend"],
+        named["disable_fp16_accum"],
+        named["stabilize_motion"],
+        named["reference_protection"],
+    ]
+    return values, named
 
 
 # ---------------------------------------------------------------------------
@@ -171,34 +223,63 @@ def build_workflow(
         outputs=[{"name": "VAE", "type": "VAE", "links": []}],
     )
 
-    easy_id = b.add_node(
-        "EasyCache", "EasyCache",
-        pos=[-1700, -100],
-        size=[320, 140],
-        widgets_values=[0.3, 0.2, 0.9, False],
-        widgets_values_named={
-            "reuse_threshold": 0.3,
-            "start_percent": 0.2,
-            "end_percent": 0.9,
-            "verbose": False,
-        },
-        inputs=[{"name": "model", "type": "MODEL", "link": None}],
-        outputs=[{"name": "MODEL", "type": "MODEL", "links": []}],
-        properties={"cnr_id": "comfy-core", "ver": "0.30.0", "Node name for S&R": "EasyCache"},
-    )
-    b.link(unet_id, 0, easy_id, 0, "MODEL")
+    sla_on = bool(config.get("sla"))
+    if sla_on:
+        lora_name = config.get("sla_lora_name") or DEFAULTS["sla_lora_name"]
+        lora_strength = float(config.get("sla_lora_strength", 1.0))
+        lora_id = b.add_node(
+            "LoraLoaderModelOnly", "SLA 4-step LoRA",
+            pos=[-1700, -100],
+            size=[420, 130],
+            widgets_values=[lora_name, lora_strength],
+            widgets_values_named={"lora_name": lora_name, "strength_model": lora_strength},
+            inputs=[{"name": "model", "type": "MODEL", "link": None}],
+            outputs=[{"name": "MODEL", "type": "MODEL", "links": []}],
+            properties={"cnr_id": "comfy-core", "ver": "0.33.0", "Node name for S&R": "LoraLoaderModelOnly"},
+        )
+        b.link(unet_id, 0, lora_id, 0, "MODEL")
 
-    sage_id = b.add_node(
-        "PathchSageAttentionKJ", "Sage Attention",
-        pos=[-1300, -80],
-        size=[280, 90],
-        widgets_values=["auto", False],
-        widgets_values_named={"sage_attention": "auto", "allow_compile": False},
-        inputs=[{"name": "model", "type": "MODEL", "link": None}],
-        outputs=[{"name": "MODEL", "type": "MODEL", "links": []}],
-        properties={"cnr_id": "comfyui-workflow-encrypt", "ver": "1.0.0", "Node name for S&R": "PathchSageAttentionKJ"},
-    )
-    b.link(easy_id, 0, sage_id, 0, "MODEL")
+        sla_wv, sla_wvn = sla_attention_widgets(config)
+        model_id = b.add_node(
+            "H3SLAAttention", "H3 SLA Attention",
+            pos=[-1300, -80],
+            size=[340, 360],
+            widgets_values=sla_wv,
+            widgets_values_named=sla_wvn,
+            inputs=[{"name": "model", "type": "MODEL", "link": None}],
+            outputs=[{"name": "MODEL", "type": "MODEL", "links": []}],
+            properties=dict(SLA_NODE_PROPERTIES),
+        )
+        b.link(lora_id, 0, model_id, 0, "MODEL")
+    else:
+        easy_id = b.add_node(
+            "EasyCache", "EasyCache",
+            pos=[-1700, -100],
+            size=[320, 140],
+            widgets_values=[0.3, 0.2, 0.9, False],
+            widgets_values_named={
+                "reuse_threshold": 0.3,
+                "start_percent": 0.2,
+                "end_percent": 0.9,
+                "verbose": False,
+            },
+            inputs=[{"name": "model", "type": "MODEL", "link": None}],
+            outputs=[{"name": "MODEL", "type": "MODEL", "links": []}],
+            properties={"cnr_id": "comfy-core", "ver": "0.30.0", "Node name for S&R": "EasyCache"},
+        )
+        b.link(unet_id, 0, easy_id, 0, "MODEL")
+
+        model_id = b.add_node(
+            "PathchSageAttentionKJ", "Sage Attention",
+            pos=[-1300, -80],
+            size=[280, 90],
+            widgets_values=["auto", False],
+            widgets_values_named={"sage_attention": "auto", "allow_compile": False},
+            inputs=[{"name": "model", "type": "MODEL", "link": None}],
+            outputs=[{"name": "MODEL", "type": "MODEL", "links": []}],
+            properties={"cnr_id": "comfyui-workflow-encrypt", "ver": "1.0.0", "Node name for S&R": "PathchSageAttentionKJ"},
+        )
+        b.link(easy_id, 0, model_id, 0, "MODEL")
 
     start_img_id = b.add_node(
         "LoadImage", "Start Image",
@@ -301,7 +382,7 @@ def build_workflow(
             ],
             outputs=[{"name": "GUIDER", "type": "GUIDER", "links": []}],
         )
-        b.link(sage_id, 0, guider_id, 0, "MODEL")
+        b.link(model_id, 0, guider_id, 0, "MODEL")
         b.link(cond_id, 0, guider_id, 1, "CONDITIONING")
 
         sched_id = b.add_node(
@@ -315,7 +396,7 @@ def build_workflow(
             ],
             outputs=[{"name": "SIGMAS", "type": "SIGMAS", "links": []}],
         )
-        b.link(sage_id, 0, sched_id, 0, "MODEL")
+        b.link(model_id, 0, sched_id, 0, "MODEL")
         b.link(steps_id, 0, sched_id, 1, "INT")
 
         sampler_id = b.add_node(
@@ -562,16 +643,35 @@ def main():
     parser.add_argument("--start-image", type=str, default=DEFAULTS["start_image"])
     parser.add_argument("--width", type=int, default=DEFAULTS["width"])
     parser.add_argument("--height", type=int, default=DEFAULTS["height"])
-    parser.add_argument("--steps", type=int, default=DEFAULTS["steps"])
+    parser.add_argument("--steps", type=int, default=None, help="Sampler steps (default 20; 6 when --sla)")
     parser.add_argument("--seed", type=int, default=DEFAULTS["base_seed"])
+    parser.add_argument("--sla", action="store_true",
+                        help="SLA turbo path: SLA 4-step LoRA + H3SLAAttention (no EasyCache / PathchSage)")
+    parser.add_argument("--sla-lora", type=str, default=None,
+                        help="SLA LoRA filename (ComfyUI models/loras/)")
+    parser.add_argument("--sla-sparsity", type=float, default=0.85,
+                        help="H3SLAAttention sparsity_ratio (0.85 matches LightX2V distill; 0.90 is faster)")
+    parser.add_argument("--sla-block-size", type=str, default="64", choices=["32", "64", "128"],
+                        help="H3SLAAttention block_size (64 for speech; 128 only if no meaningful audio)")
+    parser.add_argument("--sla-dense-backend", type=str, default="comfy_kitchen",
+                        help="H3SLAAttention dense_backend (comfy_kitchen or sage:auto, etc.)")
     args = parser.parse_args()
 
     config = DEFAULTS.copy()
     config["start_image"] = args.start_image
     config["width"] = args.width
     config["height"] = args.height
-    config["steps"] = args.steps
     config["base_seed"] = args.seed
+    config["sla"] = bool(args.sla)
+    if args.sla_lora:
+        config["sla_lora_name"] = args.sla_lora
+    config["sla_sparsity"] = args.sla_sparsity
+    config["sla_block_size"] = args.sla_block_size
+    config["sla_dense_backend"] = args.sla_dense_backend
+    if args.steps is not None:
+        config["steps"] = args.steps
+    elif config["sla"]:
+        config["steps"] = SLA_DEFAULT_STEPS
 
     segments = []
     if args.segments:
@@ -600,7 +700,8 @@ def main():
             {"index": 3, "approx_seconds": 10, "prompt": "Continue seamlessly from the supplied first frame..."},
         ]
 
-    print(f"Building workflow with {len(segments)} segments...")
+    path_note = "SLA turbo (LoRA → H3SLAAttention)" if config["sla"] else "EasyCache → Sage"
+    print(f"Building workflow with {len(segments)} segments · {path_note} · {config['steps']} steps...")
     doc = build_workflow(segments, config)
 
     out_path = Path(args.output)

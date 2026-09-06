@@ -50,7 +50,7 @@
 </head>
 <body>
 <h1>Long Video Workflow Studio</h1>
-<p class="sub">All-in-one ComfyUI JSON generator · MiniMax H3 + LTX-2.5 · Hugging Face planner + weight download script · based on Aug 2026 chaining research</p>
+<p class="sub">All-in-one ComfyUI JSON generator · MiniMax H3 (smooth / turbo / SLA turbo / Motion Context) + LTX-2.5 · Hugging Face planner + weight download script · based on Aug 2026 chaining research</p>
 
 <div class="tabs">
   <button class="on" data-tab="engine">1. Engine</button>
@@ -79,6 +79,7 @@
     </div>
     <p class="hint" id="clipCalc"></p>
     <div id="mcNote" class="hint hidden">Motion Context needs <code>ComfyUI-H3-Motion-Context</code> in custom_nodes. Graph is one DAG: clip N sampler latent → clip N+1 <code>context_latent</code>, then <code>H3 Motion Context Trim</code>.</div>
+    <div id="slaNote" class="hint hidden">SLA turbo needs <a href="https://github.com/PlagueKind/ComfyUI-PlagueKind-Nodes">ComfyUI-PlagueKind-Nodes</a> (<code>ComfyUI-H3-SLA-Attention</code>) plus <code>minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors</code> in <code>models/loras/</code>. Emitted graph is UNET → SLA LoRA → H3SLAAttention → sampler. Not stacked with PathchSageAttentionKJ, EasyCache, or PDD Acc. Prefer 6 steps for speech (4 matches the distill).</div>
   </div>
 </div>
 
@@ -174,6 +175,12 @@ const ENGINES = {
     blurb: "8-step euler + EasyCache/Sage. Same 1-frame trim as smooth. More joins if you use 4 s clips.",
     steps: 8, seg: 5, i2v: false, kind: "h3"
   },
+  "h3-sla": {
+    name: "MiniMax H3 · SLA turbo",
+    badge: "4–6 step",
+    blurb: "LightX2V 4-step SLA LoRA + PlagueKind H3SLAAttention. Alternate draft path — not stacked with Sage Pathch, EasyCache, or PDD Acc. Prefer 6 steps for speech.",
+    steps: 6, seg: 5, i2v: false, kind: "h3", sla: true
+  },
   "h3-motion": {
     name: "MiniMax H3 · Motion Context",
     badge: "best seams", badgeClass: "best",
@@ -197,6 +204,7 @@ const MODELS = {
     { dir: "vae", file: "minimax_h3_video_vae_fp16.safetensors", repo: "Comfy-Org/MiniMax-H3" },
     { dir: "vae", file: "minimax_h3_audio_vae_fp32.safetensors", repo: "Comfy-Org/MiniMax-H3" }
   ],
+  slaLora: { dir: "loras", file: "minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors", repo: "lightx2v/Minimax-h3-Turbo-SLA" },
   ltx: [
     { dir: "diffusion_models", file: "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors", repo: "Lightricks/LTX-2.5" },
     { dir: "text_encoders", file: "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", repo: "Lightricks/LTX-2.5" },
@@ -224,6 +232,7 @@ function renderEngines() {
     $("steps").value = e.steps || 20;
     $("segLen").value = e.seg;
     $("mcNote").classList.toggle("hidden", currentEngine !== "h3-motion");
+    $("slaNote").classList.toggle("hidden", currentEngine !== "h3-sla");
     $("i2vRow").classList.toggle("hidden", currentEngine === "ltx25" && !$("startImage").value);
     renderEngines(); updateCalc(); renderModels();
   });
@@ -253,7 +262,7 @@ $("provider").onchange = () => {
 
 function renderModels() {
   const kind = currentEngine.startsWith("ltx") ? "ltx" : "h3";
-  const rows = MODELS[kind];
+  const rows = currentEngine === "h3-sla" ? MODELS.h3.concat([MODELS.slaLora]) : MODELS[kind];
   $("modelTable").innerHTML = `<table><tr><th>Folder</th><th>File</th><th>Hub</th></tr>${
     rows.map(r => `<tr><td><code>${r.dir}</code></td><td>${r.file}</td><td><a href="${hfUrl(r.repo,r.file)}" target="_blank">${r.repo}</a></td></tr>`).join("")
   }</table>`;
@@ -269,11 +278,12 @@ $("comfyRoot").oninput = $("hfHubToken").oninput = renderModels;
 
 $("btnPs1").onclick = () => {
   const kind = currentEngine.startsWith("ltx") ? "ltx" : "h3";
+  const rows = currentEngine === "h3-sla" ? MODELS.h3.concat([MODELS.slaLora]) : MODELS[kind];
   const root = $("comfyRoot").value;
   const tok = $("hfHubToken").value || $("apiKey").value;
   let s = `# Hugging Face download for ${ENGINES[currentEngine].name}\n# pip install -U huggingface_hub\n`;
   if (tok) s += `$env:HF_TOKEN = "${tok}"\n`;
-  MODELS[kind].forEach(r => {
+  rows.forEach(r => {
     s += `New-Item -ItemType Directory -Force -Path "${root}\\${r.dir}" | Out-Null\n`;
     s += `huggingface-cli download ${r.repo} ${r.file} --local-dir "${root}\\${r.dir}" --local-dir-use-symlinks False\n`;
   });
@@ -380,20 +390,36 @@ class WB {
 function h3Snap(s,fps=24){ const n=Math.max(5,Math.round(s*fps)); return n+((5-(n%17))%17); }
 function ltxSnap(s,fps=24){ const raw=Math.max(9,Math.round(s*fps)+1); return 8*Math.ceil((raw-1)/8)+1; }
 
+const SLA_LORA = "minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors";
+const SLA_ATTN_WV = [0.85,"64",8192,1,true,true,"0","comfy_kitchen",true,false,"Off"];
+const SLA_ATTN_WVN = {
+  sparsity_ratio:0.85, block_size:"64", min_seq_len:8192, dense_last_steps:1,
+  protect_audio:true, enabled:true, dense_steps:"0", dense_backend:"comfy_kitchen",
+  disable_fp16_accum:true, stabilize_motion:false, reference_protection:"Off"
+};
+
 function sharedH3(b, cfg) {
   const unet=b.add("UNETLoader","UNET",[-2200,100],{ wv:[cfg.unet,"default"], outputs:[{name:"MODEL",type:"MODEL",links:[]}] });
   const clip=b.add("CLIPLoader","CLIP",[-2200,300],{ size:[420,120], wv:[cfg.clip,"minimax","default"], outputs:[{name:"CLIP",type:"CLIP",links:[]}] });
   const vvae=b.add("VAELoader","Video VAE",[-2200,500],{ wv:[cfg.vvae], outputs:[{name:"VAE",type:"VAE",links:[]}] });
   const avae=b.add("VAELoader","Audio VAE",[-2200,700],{ wv:[cfg.avae], outputs:[{name:"VAE",type:"VAE",links:[]}] });
-  const easy=b.add("EasyCache","EasyCache",[-1700,-80],{ size:[320,140], wv:[0.3,0.2,0.9,false], inputs:[{name:"model",type:"MODEL",link:null}], outputs:[{name:"MODEL",type:"MODEL",links:[]}] });
-  b.link(unet,0,easy,0,"MODEL");
-  const sage=b.add("PathchSageAttentionKJ","SageAttention",[-1700,80],{ wv:["auto",false], inputs:[{name:"model",type:"MODEL",link:null}], outputs:[{name:"MODEL",type:"MODEL",links:[]}], properties:{ cnr_id:"comfyui-workflow-encrypt", ver:"1.0.0", "Node name for S&R":"PathchSageAttentionKJ" } });
-  b.link(easy,0,sage,0,"MODEL");
+  let modelOut;
+  if (cfg.sla) {
+    const lora=b.add("LoraLoaderModelOnly","SLA 4-step LoRA",[-1700,-80],{ size:[420,130], wv:[SLA_LORA,1], wvn:{lora_name:SLA_LORA,strength_model:1}, inputs:[{name:"model",type:"MODEL",link:null}], outputs:[{name:"MODEL",type:"MODEL",links:[]}], properties:{ cnr_id:"comfy-core", ver:"0.33.0", "Node name for S&R":"LoraLoaderModelOnly" } });
+    b.link(unet,0,lora,0,"MODEL");
+    modelOut=b.add("H3SLAAttention","H3 SLA Attention",[-1700,80],{ size:[340,360], wv:SLA_ATTN_WV, wvn:SLA_ATTN_WVN, inputs:[{name:"model",type:"MODEL",link:null}], outputs:[{name:"MODEL",type:"MODEL",links:[]}], properties:{ cnr_id:"comfyui-plaguekind-nodes", ver:"1.4.4", "Node name for S&R":"H3SLAAttention" } });
+    b.link(lora,0,modelOut,0,"MODEL");
+  } else {
+    const easy=b.add("EasyCache","EasyCache",[-1700,-80],{ size:[320,140], wv:[0.3,0.2,0.9,false], inputs:[{name:"model",type:"MODEL",link:null}], outputs:[{name:"MODEL",type:"MODEL",links:[]}] });
+    b.link(unet,0,easy,0,"MODEL");
+    modelOut=b.add("PathchSageAttentionKJ","SageAttention",[-1700,80],{ wv:["auto",false], inputs:[{name:"model",type:"MODEL",link:null}], outputs:[{name:"MODEL",type:"MODEL",links:[]}], properties:{ cnr_id:"comfyui-workflow-encrypt", ver:"1.0.0", "Node name for S&R":"PathchSageAttentionKJ" } });
+    b.link(easy,0,modelOut,0,"MODEL");
+  }
   const samp=b.add("KSamplerSelect","Sampler",[-1700,250],{ wv:["euler"], outputs:[{name:"SAMPLER",type:"SAMPLER",links:[]}] });
   const steps=b.add("PrimitiveInt","Steps",[-1700,-250],{ wv:[cfg.steps,"fixed"], outputs:[{name:"INT",type:"INT",links:[]}] });
   let start=null;
   if (cfg.startImage) start=b.add("LoadImage","Start Image",[-2200,-320],{ size:[300,300], wv:[cfg.startImage,"image"], outputs:[{name:"IMAGE",type:"IMAGE",links:[]},{name:"MASK",type:"MASK",links:[]}] });
-  return { unet, clip, vvae, avae, sage, samp, steps, start };
+  return { unet, clip, vvae, avae, sage: modelOut, samp, steps, start };
 }
 
 function joinAV(b, imgIds, audIds, N, joinX, fps, prefix) {
@@ -588,7 +614,8 @@ $("btnGenerate").onclick = () => {
     clip: e.kind==="ltx" ? "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors" : "qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors",
     vvae: e.kind==="ltx" ? "ltx-2.5-video-vae-bf16.safetensors" : "minimax_h3_video_vae_fp16.safetensors",
     avae: e.kind==="ltx" ? "ltx-2.5-audio-vae-bf16.safetensors" : "minimax_h3_audio_vae_fp32.safetensors",
-    up: "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
+    up: "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
+    sla: !!e.sla
   };
   if((currentEngine==="h3-smooth"||currentEngine==="h3-motion") && !cfg.startImage) return setStat("genStatus","Start image required for this engine","error");
   let doc;

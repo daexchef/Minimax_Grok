@@ -144,10 +144,11 @@
     </div>
     <div class="row">
       <div>
-        <label>Have 8-step turbo LoRA?</label>
+        <label>Speed path</label>
         <select id="haveTurbo">
-          <option value="no" selected>No — bypass LoRA (recommended)</option>
-          <option value="yes">Yes — load turbo LoRA</option>
+          <option value="no" selected>Sage — bypass LoRA (recommended)</option>
+          <option value="yes">8-step turbo LoRA + Sage</option>
+          <option value="sla">SLA turbo — 4-step LoRA + H3SLAAttention</option>
         </select>
       </div>
       <div>
@@ -159,7 +160,7 @@
         <input type="number" id="steps" value="12" min="4" max="40">
       </div>
     </div>
-    <p class="hint">If turbo = No, the LoRA node is set to bypass (mode 4) so Comfy does not demand a missing file. Use ~12–20 steps. Turbo on: 8-step LoRA + ~8–12 steps.</p>
+    <p class="hint">Sage / no LoRA: node is bypassed (mode 4). 8-step turbo: LightX2V turbo LoRA + PathchSage. SLA turbo is an alternate path: SLA LoRA + H3SLAAttention, no PathchSage. Needs <a href="https://github.com/PlagueKind/ComfyUI-PlagueKind-Nodes" target="_blank" rel="noopener">PlagueKind-Nodes</a> and the LightX2V SLA ComfyUI LoRA. Prefer 6 steps for speech.</p>
     <div class="row">
       <div>
         <label>Width</label>
@@ -200,7 +201,7 @@
     <ul class="tips">
       <li><strong>Not</strong> your clip-chain studio. One <code>H3MultishotMemorySampler</code> keeps a memory bank across shots.</li>
       <li>CLIP lives on <code>H3ClipLoaderAny</code> <em>inside</em> the Image-to-Video subgraph — that is why it is easy to miss on the canvas.</li>
-      <li>Needs custom nodes: <code>comfyui-h3-multishot</code>, Spectrum MiniMax H3, KJNodes (SageAttention on the <em>non-turbo</em> path).</li>
+      <li>Needs custom nodes: <code>comfyui-h3-multishot</code>, Spectrum MiniMax H3, KJNodes (SageAttention on the Sage path). SLA turbo also needs <code>ComfyUI-PlagueKind-Nodes</code> (H3 SLA Attention).</li>
       <li>96 GB graph: UNET → Sage CUDA → one Spectrum → sampler. Uses sampler <code>master_frames</code> (no second VAE decode).</li>
       <li>After download: Load Image filename must match a file already in ComfyUI <code>input/</code>.</li>
     </ul>
@@ -2855,6 +2856,25 @@ function h3Frames(seconds, fps = 24) {
 
 const MAX_SHOTS = 8;       // H3MultishotMemorySampler INT max
 const SPLIT_WIDGET_MAX = 3; // H3ScriptSplit / "H3 Shot List" widget max
+const TURBO_LORA = "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors";
+const SLA_LORA = "minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors";
+
+function convertSageToSla(node) {
+  node.type = "H3SLAAttention";
+  node.title = "H3 SLA Attention";
+  node.size = [340, 360];
+  node.widgets_values = [0.85, "64", 8192, 1, true, true, "0", "comfy_kitchen", true, false, "Off"];
+  node.widgets_values_named = {
+    sparsity_ratio: 0.85, block_size: "64", min_seq_len: 8192, dense_last_steps: 1,
+    protect_audio: true, enabled: true, dense_steps: "0", dense_backend: "comfy_kitchen",
+    disable_fp16_accum: true, stabilize_motion: false, reference_protection: "Off"
+  };
+  node.properties = {
+    cnr_id: "comfyui-plaguekind-nodes",
+    ver: "1.4.4",
+    "Node name for S&R": "H3SLAAttention"
+  };
+}
 
 function clampShots(n) {
   const x = Math.max(1, parseInt(n, 10) || 1);
@@ -3015,6 +3035,7 @@ function patchWorkflow(template, shots, cfg) {
   const per = cfg.total / n;
   const frames = h3Frames(per);
   const turbo = cfg.haveTurbo;
+  const sla = !!cfg.haveSla;
 
   walkNodes(wf, (node) => {
     if (node.type === "PrimitiveStringMultiline") {
@@ -3072,11 +3093,15 @@ function patchWorkflow(template, shots, cfg) {
       setWidget(node, "steps", Math.max(4, cfg.steps));
     }
     if (node.type === "PathchSageAttentionKJ") {
-      setWidget(node, "sage_attention", "sageattn_qk_int8_pv_fp16_cuda");
-      setWidget(node, "allow_compile", false);
-      if (node.widgets_values) {
-        node.widgets_values[0] = "sageattn_qk_int8_pv_fp16_cuda";
-        node.widgets_values[1] = false;
+      if (sla) {
+        convertSageToSla(node);
+      } else {
+        setWidget(node, "sage_attention", "sageattn_qk_int8_pv_fp16_cuda");
+        setWidget(node, "allow_compile", false);
+        if (node.widgets_values) {
+          node.widgets_values[0] = "sageattn_qk_int8_pv_fp16_cuda";
+          node.widgets_values[1] = false;
+        }
       }
     }
     if (node.type === "PrimitiveBoolean") {
@@ -3144,8 +3169,16 @@ $("provider").addEventListener("change", toggleProvider);
 $("duration").addEventListener("input", updateHint);
 $("shotCount").addEventListener("input", () => { updateHint(); renderShots(); });
 $("haveTurbo").addEventListener("change", () => {
-  if ($("haveTurbo").value === "yes" && Number($("steps").value) > 12) $("steps").value = 8;
-  if ($("haveTurbo").value === "no" && Number($("steps").value) < 10) $("steps").value = 12;
+  const v = $("haveTurbo").value;
+  if (v === "yes") {
+    if (Number($("steps").value) > 12) $("steps").value = 8;
+    if ($("loraName").value.includes("sla")) $("loraName").value = TURBO_LORA;
+  }
+  if (v === "sla") {
+    $("steps").value = 6;
+    $("loraName").value = SLA_LORA;
+  }
+  if (v === "no" && Number($("steps").value) < 10) $("steps").value = 12;
 });
 
 $("btnPlan").addEventListener("click", async () => {
@@ -3197,7 +3230,8 @@ $("btnGenerate").addEventListener("click", () => {
     videoVae: $("videoVae").value.trim(),
     audioVae: $("audioVae").value.trim(),
     loraName: $("loraName").value.trim(),
-    haveTurbo: $("haveTurbo").value === "yes",
+    haveTurbo: $("haveTurbo").value === "yes" || $("haveTurbo").value === "sla",
+    haveSla: $("haveTurbo").value === "sla",
     steps: parseInt($("steps").value, 10) || 12,
     width: parseInt($("width").value, 10) || 1344,
     height: parseInt($("height").value, 10) || 768,
@@ -3206,7 +3240,8 @@ $("btnGenerate").addEventListener("click", () => {
   });
   const n = shots.length;
   download(`minimaxH330SecondSeamless_v13_${n}shot.json`, wf);
-  setStatus("success", `Wrote ${n} shots into outer {"prompts":[]} plus H3ScriptSplit and MemorySampler. CLIP=${$("clipName").value.split("/").pop()} · turbo LoRA ${$("haveTurbo").value === "yes" ? "ON" : "bypassed"}.`);
+  const speed = $("haveTurbo").value === "sla" ? "SLA turbo" : ($("haveTurbo").value === "yes" ? "8-step turbo ON" : "turbo bypassed");
+  setStatus("success", `Wrote ${n} shots into outer {"prompts":[]} plus H3ScriptSplit and MemorySampler. CLIP=${$("clipName").value.split("/").pop()} · ${speed}.`);
 });
 
 toggleProvider();

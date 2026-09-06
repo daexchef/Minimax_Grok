@@ -160,10 +160,11 @@
     </div>
     <div class="row">
       <div>
-        <label>Lightning LoRA</label>
+        <label>Speed path</label>
         <select id="haveTurbo">
-          <option value="no" selected>Off — quality (25 steps)</option>
-          <option value="yes">On — draft only (8 steps)</option>
+          <option value="no" selected>Off — quality (25 steps, Sage)</option>
+          <option value="yes">8-step turbo LoRA + Sage (draft)</option>
+          <option value="sla">SLA turbo — 4-step LoRA + H3SLAAttention</option>
         </select>
       </div>
       <div>
@@ -2897,6 +2898,25 @@ function h3Frames(seconds, fps = 24) {
 
 const MAX_SHOTS = 8;       // H3MultishotMemorySampler INT max
 const SPLIT_WIDGET_MAX = 3; // H3ScriptSplit / "H3 Shot List" widget max
+const TURBO_LORA = "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors";
+const SLA_LORA = "minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors";
+
+function convertSageToSla(node) {
+  node.type = "H3SLAAttention";
+  node.title = "H3 SLA Attention";
+  node.size = [340, 360];
+  node.widgets_values = [0.85, "64", 8192, 1, true, true, "0", "comfy_kitchen", true, false, "Off"];
+  node.widgets_values_named = {
+    sparsity_ratio: 0.85, block_size: "64", min_seq_len: 8192, dense_last_steps: 1,
+    protect_audio: true, enabled: true, dense_steps: "0", dense_backend: "comfy_kitchen",
+    disable_fp16_accum: true, stabilize_motion: false, reference_protection: "Off"
+  };
+  node.properties = {
+    cnr_id: "comfyui-plaguekind-nodes",
+    ver: "1.4.4",
+    "Node name for S&R": "H3SLAAttention"
+  };
+}
 
 function clampShots(n) {
   const x = Math.max(1, parseInt(n, 10) || 1);
@@ -3100,6 +3120,7 @@ function patchWorkflow(template, shots, cfg) {
   const per = cfg.total / n;
   const frames = h3Frames(per);
   const turbo = cfg.haveTurbo;
+  const sla = !!cfg.haveSla;
 
   walkNodes(wf, (node) => {
     if (node.type === "PrimitiveStringMultiline") {
@@ -3169,11 +3190,15 @@ function patchWorkflow(template, shots, cfg) {
       setWidget(node, "steps", Math.max(4, cfg.steps));
     }
     if (node.type === "PathchSageAttentionKJ") {
-      setWidget(node, "sage_attention", "sageattn_qk_int8_pv_fp16_cuda");
-      setWidget(node, "allow_compile", false);
-      if (node.widgets_values) {
-        node.widgets_values[0] = "sageattn_qk_int8_pv_fp16_cuda";
-        node.widgets_values[1] = false;
+      if (sla) {
+        convertSageToSla(node);
+      } else {
+        setWidget(node, "sage_attention", "sageattn_qk_int8_pv_fp16_cuda");
+        setWidget(node, "allow_compile", false);
+        if (node.widgets_values) {
+          node.widgets_values[0] = "sageattn_qk_int8_pv_fp16_cuda";
+          node.widgets_values[1] = false;
+        }
       }
     }
     if (node.type === "PrimitiveBoolean") {
@@ -3251,8 +3276,16 @@ $("provider").addEventListener("change", toggleProvider);
 $("duration").addEventListener("input", updateHint);
 $("shotCount").addEventListener("input", () => { updateHint(); renderShots(); });
 $("haveTurbo").addEventListener("change", () => {
-  if ($("haveTurbo").value === "yes") $("steps").value = 8;
-  if ($("haveTurbo").value === "no" && Number($("steps").value) < 20) $("steps").value = 25;
+  const v = $("haveTurbo").value;
+  if (v === "yes") {
+    $("steps").value = 8;
+    if ($("loraName").value.includes("sla")) $("loraName").value = TURBO_LORA;
+  }
+  if (v === "sla") {
+    $("steps").value = 6;
+    $("loraName").value = SLA_LORA;
+  }
+  if (v === "no" && Number($("steps").value) < 20) $("steps").value = 25;
 });
 
 $("btnPlan").addEventListener("click", async () => {
@@ -3304,7 +3337,8 @@ $("btnGenerate").addEventListener("click", () => {
     videoVae: $("videoVae").value.trim(),
     audioVae: $("audioVae").value.trim(),
     loraName: $("loraName").value.trim(),
-    haveTurbo: $("haveTurbo").value === "yes",
+    haveTurbo: $("haveTurbo").value === "yes" || $("haveTurbo").value === "sla",
+    haveSla: $("haveTurbo").value === "sla",
     steps: parseInt($("steps").value, 10) || 25,
     width: parseInt($("width").value, 10) || 1344,
     height: parseInt($("height").value, 10) || 768,
@@ -3316,7 +3350,8 @@ $("btnGenerate").addEventListener("click", () => {
   });
   const n = shots.length;
   download(`minimaxH3_PRO6000_cinematic_${n}shot.json`, wf);
-  setStatus("success", `PRO 6000 JSON: ${n} shots · ${$("unetName").value} · ${$("continuity").value} · ${$("steps").value} steps · turbo ${$("haveTurbo").value === "yes" ? "ON" : "off"}. Load in ComfyUI on the pod.`);
+  const speed = $("haveTurbo").value === "sla" ? "SLA turbo" : ($("haveTurbo").value === "yes" ? "8-step turbo ON" : "turbo off");
+  setStatus("success", `PRO 6000 JSON: ${n} shots · ${$("unetName").value} · ${$("continuity").value} · ${$("steps").value} steps · ${speed}. Load in ComfyUI on the pod.`);
 });
 
 toggleProvider();
