@@ -61,15 +61,51 @@
   ul.tips { font-size: 0.85rem; color: var(--muted); padding-left: 18px; }
   ul.tips li { margin-bottom: 6px; }
   ul.tips strong { color: var(--text); }
+  .aspect-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .aspect-btn {
+    background: #2a3140; color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; font-size: 0.88rem; cursor: pointer; font-weight: 600;
+  }
+  .aspect-btn:hover { background: #353e52; }
+  .aspect-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .size-pill {
+    display: inline-block; background: #10141c; border: 1px solid var(--border);
+    border-radius: 999px; padding: 4px 10px; font-size: 0.82rem; color: #c5d4ff; margin-bottom: 10px;
+  }
+  .flow-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; padding: 0; list-style: none; }
+  .flow-steps li {
+    background: #141820; border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 10px; font-size: 0.75rem; color: var(--muted);
+  }
+  .flow-steps strong { color: var(--text); }
+  video.scrub { width: 100%; max-height: 360px; background: #000; border-radius: 8px; margin-bottom: 10px; }
+  .frame-preview {
+    width: 100%; max-height: 240px; object-fit: contain; background: #000;
+    border-radius: 8px; border: 1px solid var(--border); display: none; margin-top: 8px;
+  }
+  .cmd {
+    font-family: ui-monospace, Menlo, monospace; font-size: 0.75rem; white-space: pre-wrap;
+    background: #10141c; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; color: #c9d4ea; margin: 8px 0 12px;
+  }
+  .loop-status { font-size: 0.84rem; color: #c5d4ff; margin-bottom: 10px; }
 </style>
 </head>
 <body>
-<h1>MiniMax H3 · RTX PRO 6000 cinematic</h1>
+<h1>MiniMax H3 · Director</h1>
 <p class="subtitle">
-  Same Joey Gambino <code>H3MultishotMemorySampler</code> v13 graph, locked to this RunPod card:
-  unpruned INT8 FL2VA, native <strong>1344×768</strong>, <strong>25 steps</strong>, <strong>context_pin</strong>, Sage CUDA.
-  Prompt planning can stay on this PC via <strong>llama.cpp</strong> (OpenAI-compatible server).
+  Idea → enhance → small VRAM clip → save → scrub a start frame → next clip → combine.
+  Diffusion models are baked to the default ComfyUI filenames. Planner (llama.cpp / Ollama) writes shot text only.
 </p>
+<ol class="flow-steps">
+  <li><strong>1</strong> idea</li>
+  <li><strong>2</strong> enhance / plan shots</li>
+  <li><strong>3</strong> download one-clip JSON</li>
+  <li><strong>4</strong> render &amp; save</li>
+  <li><strong>5</strong> scrub → PNG start frame</li>
+  <li><strong>6</strong> next clip</li>
+  <li><strong>7</strong> concat</li>
+</ol>
 
 <div class="grid">
   <div class="panel">
@@ -88,9 +124,17 @@
     </div>
     <p class="hint" id="lenHint">3 shots × 10.0 s · 243 frames/shot (17n+5 @ 24 fps)</p>
     <p class="hint">Cinema default: ~10 s takes, not 4 s cuts. Native max per shot is ~15 s. Sampler cap is 8 shots.</p>
-    <p class="hint">Hard cap is <strong>8</strong> (H3MultishotMemorySampler). <code>H3 Shot List</code> widget max is <strong>3</strong> — the generator leaves that widget at <code>0</code> (count from <code>---</code>) so 4–8 shots do not trip “input out of range”.</p>
-    <label>Start image (must exist in ComfyUI <code>input/</code>)</label>
-    <input id="startImage" value="start_frame.png">
+    <div class="row">
+      <div>
+        <label>Working shot (iterative loop)</label>
+        <input type="number" id="workingShot" value="1" min="1" max="8">
+      </div>
+      <div>
+        <label>Start image in ComfyUI <code>input/</code></label>
+        <input id="startImage" value="h3_chain/next_start.png">
+      </div>
+    </div>
+    <p class="hint">Handoff path: <code>ComfyUI/input/h3_chain/next_start.png</code>. Capture a frame below, then copy or run the helper so LoadImage can see it.</p>
   </div>
 
   <div class="panel">
@@ -133,92 +177,77 @@
   </div>
 
   <div class="panel full">
-    <h2>3. PRO 6000 stack (this pod)</h2>
+    <h2>3. Canvas (aspect, not megapixels)</h2>
     <div class="warn-box">
-      Finals use <strong>unpruned</strong> <code>minimax_h3_fl2va_int8_convrot</code> (31.7 GB) already on the volume.
-      Turbo LoRA stays <strong>off</strong>. Native canvas is 1344×768 (0.98 MP) — do not generate at 2.0 MP.
+      Default is a <strong>Bro-class draft</strong> (~0.4 MP, multiple of 32). Hero is the native ~1 MP canvas (16:9 = 1344×768).
+      UNET / CLIP / VAE / LoRA stay on disk defaults — no model picker. Turbo LoRA stays <strong>off</strong> unless you open Advanced.
     </div>
     <div class="row">
       <div>
-        <label>UNET</label>
-        <input id="unetName" value="minimax_h3_fl2va_int8_convrot.safetensors">
-      </div>
-      <div>
-        <label>CLIP (text encoder)</label>
-        <input id="clipName" value="qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors">
-      </div>
-    </div>
-    <div class="row">
-      <div>
-        <label>Video VAE</label>
-        <input id="videoVae" value="minimax_h3_video_vae_fp16.safetensors">
-      </div>
-      <div>
-        <label>Audio VAE</label>
-        <input id="audioVae" value="minimax_h3_audio_vae_fp32.safetensors">
-      </div>
-    </div>
-    <div class="row">
-      <div>
-        <label>Lightning LoRA</label>
-        <select id="haveTurbo">
-          <option value="no" selected>Off — quality (25 steps)</option>
-          <option value="yes">On — draft only (8 steps)</option>
+        <label>Quality</label>
+        <select id="qualityMode">
+          <option value="draft" selected>Draft — ~0.4 MP, 12 steps (iterate)</option>
+          <option value="hero">Hero — ~1 MP, 25 steps (finals only)</option>
         </select>
       </div>
       <div>
-        <label>Turbo LoRA filename</label>
-        <input id="loraName" value="minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors">
-      </div>
-      <div>
-        <label>Sampler steps</label>
-        <input type="number" id="steps" value="25" min="4" max="40">
+        <label>Computed size</label>
+        <div class="size-pill" id="sizePill">16:9 · 864×480 · 0.41 MP</div>
+        <p class="hint" id="sizeHint">Draft 16:9 matches the documented 864×480 table.</p>
       </div>
     </div>
-    <div class="row">
-      <div>
-        <label>Width</label>
-        <input type="number" id="width" value="1344">
+    <label>Aspect ratio (1:1 · 16:9 · 9:16 · 4:3 · 3:4 · 21:9)</label>
+    <div class="aspect-row" id="aspectRow"></div>
+    <details>
+      <summary>Advanced sampler (usually leave closed)</summary>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>Sampler steps</label>
+          <input type="number" id="steps" value="12" min="4" max="40">
+        </div>
+        <div>
+          <label>Lightning LoRA</label>
+          <select id="haveTurbo">
+            <option value="no" selected>Off (default)</option>
+            <option value="yes">On — 8-step draft only</option>
+          </select>
+        </div>
+        <div>
+          <label>Memory frames (0–3)</label>
+          <input type="number" id="memoryFrames" value="1" min="0" max="3">
+        </div>
+        <div>
+          <label>Anchor frames</label>
+          <input type="number" id="anchorFrames" value="1" min="0" max="9">
+        </div>
       </div>
-      <div>
-        <label>Height</label>
-        <input type="number" id="height" value="768">
+      <div class="row">
+        <div>
+          <label>Continuity (all-shots JSON only)</label>
+          <select id="continuity">
+            <option value="first_frame" selected>first_frame — stock fl2va I2V handoff</option>
+            <option value="context_pin">context_pin — fluid join (needs ref2va + Motion-Context)</option>
+            <option value="latent_handoff">latent_handoff — one denoise trajectory</option>
+            <option value="cut">cut — hard cuts (story edits only)</option>
+          </select>
+        </div>
+        <div>
+          <label>Color level</label>
+          <select id="colorLevel">
+            <option value="scene" selected>scene — one grade, no seam step</option>
+            <option value="off">off</option>
+          </select>
+        </div>
+        <div>
+          <label>Seed per shot</label>
+          <select id="seedPerShot">
+            <option value="no" selected>Same seed (smoother chain)</option>
+            <option value="yes">Vary per shot</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <label>Memory frames (0–3)</label>
-        <input type="number" id="memoryFrames" value="1" min="0" max="3">
-      </div>
-      <div>
-        <label>Anchor frames</label>
-        <input type="number" id="anchorFrames" value="1" min="0" max="9">
-      </div>
-    </div>
-    <div class="row">
-      <div>
-        <label>Continuity</label>
-        <select id="continuity">
-          <option value="first_frame" selected>first_frame — stock fl2va I2V handoff</option>
-          <option value="context_pin">context_pin — fluid join (needs ref2va + Motion-Context)</option>
-          <option value="latent_handoff">latent_handoff — one denoise trajectory</option>
-          <option value="cut">cut — hard cuts (story edits only)</option>
-        </select>
-      </div>
-      <div>
-        <label>Color level</label>
-        <select id="colorLevel">
-          <option value="scene" selected>scene — one grade, no seam step</option>
-          <option value="off">off</option>
-        </select>
-      </div>
-      <div>
-        <label>Seed per shot</label>
-        <select id="seedPerShot">
-          <option value="no" selected>Same seed (smoother chain)</option>
-          <option value="yes">Vary per shot</option>
-        </select>
-      </div>
-    </div>
-    <p class="hint">context_pin pins the last 22 frames as raw latents. Same seed + scene color = fewer pops at the join. Memory frames = 1 (motion) not 3 (texture ratchet).</p>
+      <p class="hint">Auto last-frame joins inside one graph are the weak continuity path. Prefer one-clip JSON + a human-picked start PNG for seg N+1.</p>
+    </details>
   </div>
 
   <div class="panel full">
@@ -231,20 +260,72 @@
     <div id="shotList"></div>
     <div class="actions">
       <button id="btnPlan">Generate shots (local)</button>
-      <button id="btnGenerate" class="secondary">Download workflow JSON</button>
+      <button id="btnGenerateShot">Download this shot JSON</button>
+      <button id="btnGenerate" class="secondary">Download all-shots JSON</button>
     </div>
+    <p class="hint">This shot → one I2V clip saved as <code>video/MiniMax_H3_PRO6000_segNN</code>. All-shots keeps the v13 sampler graph (auto-join). After each clip, scrub a frame for the next start image, then concat with the helper.</p>
     <div id="status" class="status"></div>
+  </div>
+
+  <div class="panel full">
+    <h2>5. Scrub → snapshot → next start frame</h2>
+    <p class="loop-status" id="loopStatus">Loop: render shot 1 → capture a PNG → set as shot 2 start → repeat → concat.</p>
+    <p class="hint">
+      Auto last-frame wiring (Long generator / sampler memory) often picks a smear or blink.
+      Pick the frame you actually want as <code>LoadImage</code> / <code>first_frame</code> for the next clip.
+    </p>
+    <div class="row">
+      <div>
+        <label>Open a local clip (mp4)</label>
+        <input type="file" id="clipFile" accept="video/mp4,video/webm,video/quicktime,video/*">
+      </div>
+      <div>
+        <label>Or paste a path for the helper script</label>
+        <input id="clipPath" placeholder="C:\ComfyUI\output\video\MiniMax_H3_PRO6000_seg01.mp4">
+      </div>
+    </div>
+    <video id="scrubVideo" class="scrub" controls playsinline></video>
+    <label>Scrub</label>
+    <input type="range" id="scrubSlider" min="0" max="1000" value="0" step="1" disabled>
+    <p class="hint" id="scrubTime">0.00 s / 0.00 s · frame —</p>
+    <div class="actions">
+      <button id="btnCapture">Capture frame</button>
+      <button id="btnUseStart" class="secondary">Use capture as next start</button>
+      <button id="btnCopyHelper" class="secondary">Copy helper command</button>
+    </div>
+    <img id="framePreview" class="frame-preview" alt="Captured start frame">
+    <p class="hint" id="captureHint">Capture exports a PNG download and remembers it as the next start frame. The browser cannot write into Comfy <code>input/</code> from file:// — drop the PNG there or run the script.</p>
+    <label>ComfyUI root (for the helper)</label>
+    <input id="comfyRoot" placeholder="C:\ComfyUI">
+    <label>One-click helper (PowerShell + ffmpeg)</label>
+    <div class="cmd" id="helperCmd">.\scripts\h3_capture_next_start.ps1 -Video "C:\path\seg01.mp4" -Time 0.00 -ComfyRoot "C:\ComfyUI" -OutRel "h3_chain/next_start.png"</div>
+    <details>
+      <summary>LosslessCut on Windows (Bro: <code>LosslessCut.exe</code> via winget)</summary>
+      <ol class="tips" style="margin-top:10px">
+        <li>Install if needed: <code>winget install mifi.losslesscut</code></li>
+        <li>Open the finished clip (or run the helper with <code>-LaunchLosslessCut</code>).</li>
+        <li>Scrub to the join you want. Export the current frame as PNG (screenshot / export frame).</li>
+        <li>Save as <code>ComfyUI\input\h3_chain\next_start.png</code>.</li>
+        <li>This page already points LoadImage at <code>h3_chain/next_start.png</code>. Download the next shot JSON and queue it.</li>
+      </ol>
+      <div class="cmd">.\scripts\h3_capture_next_start.ps1 -Video "C:\ComfyUI\output\video\MiniMax_H3_PRO6000_seg01.mp4" -LaunchLosslessCut</div>
+    </details>
+    <details>
+      <summary>Combine clips at the end (ffmpeg concat, no new Comfy nodes)</summary>
+      <p class="hint" style="margin-top:10px">After seg01..segN are on disk, stitch without re-encoding:</p>
+      <div class="cmd" id="concatCmd">.\scripts\h3_capture_next_start.ps1 -ConcatClips "C:\ComfyUI\output\video\MiniMax_H3_PRO6000_seg01.mp4","C:\ComfyUI\output\video\MiniMax_H3_PRO6000_seg02.mp4" -ConcatOut "C:\ComfyUI\output\video\MiniMax_H3_PRO6000_final.mp4"</div>
+    </details>
   </div>
 
   <div class="panel full">
     <h2>What this graph is</h2>
     <ul class="tips">
-      <li>Target machine: RunPod <strong>RTX PRO 6000</strong> (96 GB), ComfyUI 0.34.1, SageAttention in the volume venv.</li>
-      <li>UNET → Sage <code>sageattn_qk_int8_pv_fp16_cuda</code> → Spectrum → <code>H3MultishotMemorySampler</code>.</li>
-      <li>Needs: <code>ComfyUI-H3-Multishot</code>, <code>ComfyUI-H3-Motion-Context</code> (for context_pin), Spectrum MiniMax H3, KJNodes.</li>
-      <li>2K regenerate is <strong>not</strong> in open weights. Deliver 1344×768, upscale after if needed.</li>
-      <li>Start image must already sit in ComfyUI <code>input/</code>.</li>
-      <li>llama.cpp writes shot text only. It does not run on the 6000 and is not a Comfy node.</li>
+      <li>Same Joey <code>H3MultishotMemorySampler</code> v13 graph. Models are hardcoded: <code>minimax_h3_fl2va_int8_convrot.safetensors</code>, matching video/audio VAEs, Qwen CLIP, turbo LoRA present but off.</li>
+      <li>UNET → Sage <code>sageattn_qk_int8_pv_fp16_cuda</code> → Spectrum → sampler. No model catalog in this UI or in the emitted notes.</li>
+      <li>Needs: <code>ComfyUI-H3-Multishot</code>, Spectrum MiniMax H3, KJNodes. Motion-Context only if you pick <code>context_pin</code>.</li>
+      <li>Recommended loop: one shot per JSON with a human-picked start PNG. All-shots JSON still auto-joins (weaker continuity).</li>
+      <li>Start image must sit in ComfyUI <code>input/</code> (use <code>h3_chain/next_start.png</code>).</li>
+      <li>llama.cpp / Ollama write shot text only. They do not run on the GPU and are not Comfy nodes.</li>
     </ul>
   </div>
 </div>
@@ -2888,11 +2969,96 @@
 <script>
 const $ = id => document.getElementById(id);
 
+const DEFAULT_MODELS = {
+  unetName: "minimax_h3_fl2va_int8_convrot.safetensors",
+  clipName: "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+  videoVae: "minimax_h3_video_vae_fp16.safetensors",
+  audioVae: "minimax_h3_audio_vae_fp32.safetensors",
+  loraName: "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+};
+
+const ASPECTS = [
+  { id: "1:1", aw: 1, ah: 1, comfy: "1:1 (Square)" },
+  { id: "16:9", aw: 16, ah: 9, comfy: "16:9 (Widescreen)" },
+  { id: "9:16", aw: 9, ah: 16, comfy: "9:16 (Vertical)" },
+  { id: "4:3", aw: 4, ah: 3, comfy: "4:3 (Standard)" },
+  { id: "3:4", aw: 3, ah: 4, comfy: "3:4 (Portrait)" },
+  { id: "21:9", aw: 21, ah: 9, comfy: "21:9 (Ultrawide)" }
+];
+
+const QUALITY = {
+  draft: { mp: 0.4, steps: 12 },
+  hero: { mp: 0.98, steps: 25 }
+};
+
+const KNOWN_SIZES = {
+  "draft|16:9": [864, 480],
+  "draft|9:16": [480, 864],
+  "hero|16:9": [1344, 768],
+  "hero|9:16": [768, 1344]
+};
+
+let selectedAspect = "16:9";
+let lastCapture = null;
+
 function h3Frames(seconds, fps = 24) {
   const raw = Math.max(5, Math.round(seconds * fps));
   const rem = raw % 17;
   const add = (5 - rem + 17) % 17;
   return raw + add;
+}
+
+function snap32(n) {
+  return Math.max(32, Math.round(n / 32) * 32);
+}
+
+function sizeForAspect(aspectId, quality) {
+  const key = quality + "|" + aspectId;
+  if (KNOWN_SIZES[key]) return { width: KNOWN_SIZES[key][0], height: KNOWN_SIZES[key][1] };
+  const spec = ASPECTS.find(a => a.id === aspectId) || ASPECTS[1];
+  const mp = (QUALITY[quality] || QUALITY.draft).mp;
+  const aspect = spec.aw / spec.ah;
+  let h = Math.sqrt((mp * 1e6) / aspect);
+  let w = h * aspect;
+  return { width: snap32(w), height: snap32(h) };
+}
+
+function currentSize() {
+  const quality = $("qualityMode").value === "hero" ? "hero" : "draft";
+  const size = sizeForAspect(selectedAspect, quality);
+  const mp = (size.width * size.height) / 1e6;
+  return { quality, ...size, mp, aspect: selectedAspect };
+}
+
+function aspectSpec() {
+  return ASPECTS.find(a => a.id === selectedAspect) || ASPECTS[1];
+}
+
+function updateSizeLabel() {
+  const s = currentSize();
+  $("sizePill").textContent = `${s.aspect} · ${s.width}×${s.height} · ${s.mp.toFixed(2)} MP`;
+  $("sizeHint").textContent = s.quality === "draft"
+    ? `Draft default (~0.4 MP, multiple of 32). Bro-class VRAM.`
+    : `Hero native-class canvas. Do not push past ~1 MP.`;
+}
+
+function renderAspectButtons() {
+  const row = $("aspectRow");
+  row.innerHTML = "";
+  ASPECTS.forEach(a => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "aspect-btn" + (a.id === selectedAspect ? " active" : "");
+    const sz = sizeForAspect(a.id, $("qualityMode").value === "hero" ? "hero" : "draft");
+    btn.textContent = `${a.id}  ${sz.width}×${sz.height}`;
+    btn.addEventListener("click", () => {
+      selectedAspect = a.id;
+      renderAspectButtons();
+      updateSizeLabel();
+    });
+    row.appendChild(btn);
+  });
+  updateSizeLabel();
 }
 
 const MAX_SHOTS = 8;       // H3MultishotMemorySampler INT max
@@ -2910,10 +3076,29 @@ function perShotSeconds() {
   return { total, n, per: total / n, frames: h3Frames(total / n) };
 }
 
+function workingShotIndex() {
+  const n = clampShots($("shotCount").value);
+  let w = Math.max(1, parseInt($("workingShot").value, 10) || 1);
+  if (w > n) w = n;
+  if (String($("workingShot").value) !== String(w)) $("workingShot").value = String(w);
+  $("workingShot").max = String(n);
+  return w;
+}
+
+function nextStartName(shotIndex) {
+  const next = shotIndex + 1;
+  return `h3_chain/seg${String(next).padStart(2, "0")}_start.png`;
+}
+
 function updateHint() {
   const { n, per, frames } = perShotSeconds();
   $("lenHint").textContent =
     `${n} shot${n === 1 ? "" : "s"} × ${per.toFixed(1)} s · ${frames} frames/shot (17n+5 @ 24 fps) · ~${(frames / 24 * n).toFixed(1)} s picture`;
+  const w = workingShotIndex();
+  $("loopStatus").textContent = w < n
+    ? `Loop: render shot ${w} → capture a PNG → set as shot ${w + 1} start (${nextStartName(w)}) → repeat → concat.`
+    : `Loop: shot ${w} is the last clip. Capture a frame only if you need a still; then concat seg01..seg${String(n).padStart(2, "0")}.`;
+  updateHelperCmd();
 }
 
 function toggleProvider() {
@@ -3160,6 +3345,7 @@ function patchWorkflow(template, shots, cfg) {
       setWidget(node, "pin_renorm", true);
       setWidget(node, "master_normalize", "luma+contrast");
       setWidget(node, "low_ram_master", false);
+      setWidget(node, "save_every_shot", !!cfg.saveEveryShot);
       if (cfg.continuity === "latent_handoff") {
         setWidget(node, "handoff_taper", 4);
         setWidget(node, "handoff_depth", "bootstrap");
@@ -3197,13 +3383,44 @@ function patchWorkflow(template, shots, cfg) {
       if (v === 768 || lab === "height") setWidget(node, "value", cfg.height);
       if (lab.includes("step") || v === 20 || v === 12) setWidget(node, "value", cfg.steps);
     }
+    if (node.type === "MarkdownNote") {
+      const title = String(node.title || "");
+      if (/model links/i.test(title)) {
+        node.title = "Note: Director loop";
+        const note = [
+          "Director loop (no model picker)",
+          "",
+          "1. Queue this JSON.",
+          "2. Clip saves under Comfy output/video (MiniMax_H3_PRO6000_segNN).",
+          "3. Scrub the mp4 in the HTML director or LosslessCut.",
+          "4. Capture a PNG to ComfyUI/input/h3_chain/ as the next LoadImage.",
+          "5. Download the next shot JSON and repeat, then ffmpeg-concat.",
+          "",
+          "Models load from default ComfyUI folders (UNET/CLIP/VAE/LoRA filenames baked in)."
+        ].join("\n");
+        setWidget(node, "text", note);
+        if (node.widgets_values) node.widgets_values[0] = note;
+      }
+      if (/size settings/i.test(title)) {
+        const s = { width: cfg.width, height: cfg.height, aspect: cfg.aspectLabel, mp: cfg.megapixels };
+        const table = `| megapixels | Aspect | Output (multiple=32) |\n|---|---|---|\n| ${s.mp.toFixed(2)} | ${s.aspect} | ${s.width} x ${s.height} |`;
+        setWidget(node, "text", table);
+        if (node.widgets_values) node.widgets_values[0] = table;
+      }
+    }
+    if (node.type === "SaveVideo") {
+      if (cfg.filenamePrefix) {
+        setWidget(node, "filename_prefix", cfg.filenamePrefix);
+        if (node.widgets_values) node.widgets_values[0] = cfg.filenamePrefix;
+      }
+    }
     if (node.type === "ResolutionSelector") {
-      setWidget(node, "megapixels", 0.98);
-      setWidget(node, "aspect_ratio", "16:9 (Widescreen)");
+      setWidget(node, "megapixels", cfg.megapixels);
+      setWidget(node, "aspect_ratio", cfg.aspectLabel);
       setWidget(node, "multiple", 32);
       if (Array.isArray(node.widgets_values) && node.widgets_values.length >= 2) {
-        node.widgets_values[0] = "16:9 (Widescreen)";
-        node.widgets_values[1] = 0.98;
+        node.widgets_values[0] = cfg.aspectLabel;
+        node.widgets_values[1] = cfg.megapixels;
       }
     }
     if (String(node.type).includes("79dd8a95") || node.id === 140) {
@@ -3247,12 +3464,211 @@ function download(name, obj) {
   URL.revokeObjectURL(a.href);
 }
 
+function downloadBlob(name, blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function collectConfig(opts) {
+  const size = currentSize();
+  const { total, n, per } = perShotSeconds();
+  const working = workingShotIndex();
+  const startImage = ($("startImage").value || "").trim() || "h3_chain/next_start.png";
+  return {
+    total,
+    n,
+    per,
+    working,
+    startImage,
+    unetName: DEFAULT_MODELS.unetName,
+    clipName: DEFAULT_MODELS.clipName,
+    videoVae: DEFAULT_MODELS.videoVae,
+    audioVae: DEFAULT_MODELS.audioVae,
+    loraName: DEFAULT_MODELS.loraName,
+    haveTurbo: $("haveTurbo").value === "yes",
+    steps: parseInt($("steps").value, 10) || (size.quality === "hero" ? 25 : 12),
+    width: size.width,
+    height: size.height,
+    megapixels: size.mp,
+    aspectLabel: aspectSpec().comfy,
+    aspect: size.aspect,
+    quality: size.quality,
+    memoryFrames: Math.max(0, Math.min(3, parseInt($("memoryFrames").value, 10) || 1)),
+    anchorFrames: parseInt($("anchorFrames").value, 10) || 1,
+    continuity: $("continuity").value,
+    colorLevel: $("colorLevel").value,
+    seedPerShot: $("seedPerShot").value === "yes",
+    filenamePrefix: (opts && opts.filenamePrefix) || "video/MiniMax_H3_PRO6000",
+    saveEveryShot: !!(opts && opts.saveEveryShot)
+  };
+}
+
+function emitWorkflow(shots, cfg, filename) {
+  let template;
+  try {
+    template = JSON.parse($("v13-template").textContent);
+  } catch (e) {
+    setStatus("error", "Embedded v13 template is missing or invalid.");
+    return false;
+  }
+  const wf = patchWorkflow(template, shots, cfg);
+  download(filename, wf);
+  return true;
+}
+
+function plannedShots() {
+  let shots = collectShots();
+  if (!shots.length) {
+    setStatus("error", "Generate or paste at least one shot.");
+    return null;
+  }
+  if (shots.length > MAX_SHOTS) {
+    shots = shots.slice(0, MAX_SHOTS);
+    $("shotCount").value = String(MAX_SHOTS);
+    renderShots(shots);
+    updateHint();
+  }
+  return shots;
+}
+
+function quotePs(s) {
+  return '"' + String(s).replace(/"/g, '`"') + '"';
+}
+
+function helperVideoPath() {
+  return ($("clipPath").value || "").trim() ||
+    "C:\\ComfyUI\\output\\video\\MiniMax_H3_PRO6000_seg" + String(workingShotIndex()).padStart(2, "0") + ".mp4";
+}
+
+function updateHelperCmd() {
+  const t = Number($("scrubVideo").currentTime || 0);
+  const root = ($("comfyRoot").value || "").trim() || "C:\\ComfyUI";
+  const video = helperVideoPath();
+  const w = workingShotIndex();
+  const outRel = "h3_chain/next_start.png";
+  const named = w < clampShots($("shotCount").value) ? nextStartName(w) : "";
+  $("helperCmd").textContent =
+    `.\\scripts\\h3_capture_next_start.ps1 -Video ${quotePs(video)} -Time ${t.toFixed(2)} -ComfyRoot ${quotePs(root)} -OutRel ${quotePs(outRel)}` +
+    (named ? ` -AlsoRel ${quotePs(named)}` : "");
+  const n = clampShots($("shotCount").value);
+  const clips = [];
+  for (let i = 1; i <= n; i++) {
+    clips.push(quotePs(`C:\\ComfyUI\\output\\video\\MiniMax_H3_PRO6000_seg${String(i).padStart(2, "0")}.mp4`));
+  }
+  $("concatCmd").textContent =
+    `.\\scripts\\h3_capture_next_start.ps1 -ConcatClips ${clips.join(",")} -ConcatOut ${quotePs("C:\\ComfyUI\\output\\video\\MiniMax_H3_PRO6000_final.mp4")}`;
+}
+
+function formatTime(sec) {
+  if (!isFinite(sec)) return "0.00";
+  return sec.toFixed(2);
+}
+
+function syncScrubFromVideo() {
+  const v = $("scrubVideo");
+  const sl = $("scrubSlider");
+  if (!v.duration || !isFinite(v.duration)) return;
+  sl.max = "1000";
+  sl.value = String(Math.round((v.currentTime / v.duration) * 1000));
+  sl.disabled = false;
+  const frame = v.currentTime * 24;
+  $("scrubTime").textContent = `${formatTime(v.currentTime)} s / ${formatTime(v.duration)} s · ~frame ${Math.round(frame)} @ 24 fps`;
+  updateHelperCmd();
+}
+
+function captureFrame() {
+  const v = $("scrubVideo");
+  if (!v.videoWidth) {
+    setStatus("error", "Open a local mp4 first, then scrub to the join you want.");
+    return;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = v.videoWidth;
+  canvas.height = v.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(v, 0, 0);
+  const w = workingShotIndex();
+  const n = clampShots($("shotCount").value);
+  const nextIdx = Math.min(n, w + 1);
+  const fileBase = `h3_chain_seg${String(nextIdx).padStart(2, "0")}_start.png`;
+  const inputRel = "h3_chain/next_start.png";
+  canvas.toBlob(blob => {
+    if (!blob) return setStatus("error", "Could not encode PNG from this frame.");
+    lastCapture = { blob, fileBase, inputRel, namedRel: nextStartName(w), time: v.currentTime, width: canvas.width, height: canvas.height };
+    downloadBlob(fileBase, blob);
+    const img = $("framePreview");
+    img.src = URL.createObjectURL(blob);
+    img.style.display = "block";
+    $("startImage").value = inputRel;
+    $("captureHint").textContent =
+      `Captured ${canvas.width}×${canvas.height} at ${formatTime(v.currentTime)}s. Downloaded ${fileBase}. Copy to ComfyUI/input/${inputRel} (and optionally ${nextStartName(w)}) or run the helper.`;
+    setStatus("success", `Start frame ready: ${inputRel}. Download shot ${nextIdx} JSON after the PNG is in input/.`);
+    updateHelperCmd();
+  }, "image/png");
+}
+
+function useCaptureAsStart() {
+  if (!lastCapture) return setStatus("error", "Capture a frame first.");
+  $("startImage").value = lastCapture.inputRel;
+  const w = workingShotIndex();
+  const n = clampShots($("shotCount").value);
+  if (w < n) $("workingShot").value = String(w + 1);
+  updateHint();
+  setStatus("success", `LoadImage will use ${lastCapture.inputRel}. Working shot is now ${$("workingShot").value}.`);
+}
+
 $("provider").addEventListener("change", toggleProvider);
 $("duration").addEventListener("input", updateHint);
 $("shotCount").addEventListener("input", () => { updateHint(); renderShots(); });
+$("workingShot").addEventListener("input", updateHint);
+$("qualityMode").addEventListener("change", () => {
+  const q = $("qualityMode").value === "hero" ? "hero" : "draft";
+  if ($("haveTurbo").value !== "yes") $("steps").value = String(QUALITY[q].steps);
+  renderAspectButtons();
+});
 $("haveTurbo").addEventListener("change", () => {
   if ($("haveTurbo").value === "yes") $("steps").value = 8;
-  if ($("haveTurbo").value === "no" && Number($("steps").value) < 20) $("steps").value = 25;
+  if ($("haveTurbo").value === "no") {
+    $("steps").value = String(QUALITY[$("qualityMode").value === "hero" ? "hero" : "draft"].steps);
+  }
+});
+
+$("clipFile").addEventListener("change", () => {
+  const f = $("clipFile").files && $("clipFile").files[0];
+  if (!f) return;
+  const v = $("scrubVideo");
+  if (v.dataset.url) URL.revokeObjectURL(v.dataset.url);
+  const url = URL.createObjectURL(f);
+  v.dataset.url = url;
+  v.src = url;
+  $("clipPath").value = f.name;
+  $("scrubSlider").disabled = false;
+  setStatus("info", `Loaded ${f.name}. Scrub, then Capture frame.`);
+});
+$("clipPath").addEventListener("input", updateHelperCmd);
+$("comfyRoot").addEventListener("input", updateHelperCmd);
+$("scrubVideo").addEventListener("loadedmetadata", syncScrubFromVideo);
+$("scrubVideo").addEventListener("timeupdate", syncScrubFromVideo);
+$("scrubVideo").addEventListener("seeked", syncScrubFromVideo);
+$("scrubSlider").addEventListener("input", () => {
+  const v = $("scrubVideo");
+  if (!v.duration) return;
+  v.currentTime = (Number($("scrubSlider").value) / 1000) * v.duration;
+});
+$("btnCapture").addEventListener("click", captureFrame);
+$("btnUseStart").addEventListener("click", useCaptureAsStart);
+$("btnCopyHelper").addEventListener("click", async () => {
+  updateHelperCmd();
+  const text = $("helperCmd").textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus("success", "Helper command copied.");
+  } catch (e) {
+    setStatus("info", text);
+  }
 });
 
 $("btnPlan").addEventListener("click", async () => {
@@ -3274,52 +3690,40 @@ $("btnPlan").addEventListener("click", async () => {
       }
     }
     renderShots(shots);
-    setStatus("success", `${shots.length} shots ready. Edit any box, then download JSON.`);
+    setStatus("success", `${shots.length} shots ready. Edit any box, then download this shot JSON.`);
   } catch (e) {
     setStatus("error", String(e.message || e));
   }
 });
 
+$("btnGenerateShot").addEventListener("click", () => {
+  const shots = plannedShots();
+  if (!shots) return;
+  const cfg = collectConfig();
+  const idx = Math.min(shots.length, cfg.working);
+  const one = [shots[idx - 1]];
+  cfg.total = cfg.per;
+  cfg.filenamePrefix = `video/MiniMax_H3_PRO6000_seg${String(idx).padStart(2, "0")}`;
+  cfg.saveEveryShot = false;
+  if (!emitWorkflow(one, cfg, `minimaxH3_PRO6000_seg${String(idx).padStart(2, "0")}.json`)) return;
+  setStatus("success",
+    `Shot ${idx}/${shots.length} JSON · ${cfg.aspect} ${cfg.width}×${cfg.height} · ${cfg.steps} steps · start ${cfg.startImage} · ${DEFAULT_MODELS.unetName}. Save clip, scrub, capture next start.`);
+});
+
 $("btnGenerate").addEventListener("click", () => {
-  let template;
-  try {
-    template = JSON.parse($("v13-template").textContent);
-  } catch (e) {
-    return setStatus("error", "Embedded v13 template is missing or invalid.");
-  }
-  let shots = collectShots();
-  if (!shots.length) return setStatus("error", "Generate or paste at least one shot.");
-  if (shots.length > MAX_SHOTS) {
-    shots = shots.slice(0, MAX_SHOTS);
-    $("shotCount").value = String(MAX_SHOTS);
-    renderShots(shots);
-    updateHint();
-  }
-  const { total } = perShotSeconds();
-  const wf = patchWorkflow(template, shots, {
-    total,
-    startImage: $("startImage").value.trim() || "start_frame.png",
-    unetName: $("unetName").value.trim(),
-    clipName: $("clipName").value.trim(),
-    videoVae: $("videoVae").value.trim(),
-    audioVae: $("audioVae").value.trim(),
-    loraName: $("loraName").value.trim(),
-    haveTurbo: $("haveTurbo").value === "yes",
-    steps: parseInt($("steps").value, 10) || 25,
-    width: parseInt($("width").value, 10) || 1344,
-    height: parseInt($("height").value, 10) || 768,
-    memoryFrames: Math.max(0, Math.min(3, parseInt($("memoryFrames").value, 10) || 1)),
-    anchorFrames: parseInt($("anchorFrames").value, 10) || 1,
-    continuity: $("continuity").value,
-    colorLevel: $("colorLevel").value,
-    seedPerShot: $("seedPerShot").value === "yes"
+  const shots = plannedShots();
+  if (!shots) return;
+  const cfg = collectConfig({
+    filenamePrefix: "video/MiniMax_H3_PRO6000",
+    saveEveryShot: true
   });
-  const n = shots.length;
-  download(`minimaxH3_PRO6000_cinematic_${n}shot.json`, wf);
-  setStatus("success", `PRO 6000 JSON: ${n} shots · ${$("unetName").value} · ${$("continuity").value} · ${$("steps").value} steps · turbo ${$("haveTurbo").value === "yes" ? "ON" : "off"}. Load in ComfyUI on the pod.`);
+  if (!emitWorkflow(shots, cfg, `minimaxH3_PRO6000_cinematic_${shots.length}shot.json`)) return;
+  setStatus("success",
+    `All-shots JSON: ${shots.length} shots · ${cfg.aspect} ${cfg.width}×${cfg.height} · ${cfg.continuity} · ${cfg.steps} steps. Sampler auto-join is weaker than human-picked start frames.`);
 });
 
 toggleProvider();
+renderAspectButtons();
 updateHint();
 renderShots();
 </script>
