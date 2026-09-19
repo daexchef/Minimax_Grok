@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MiniMax H3 PRO 6000 Cinematic Generator</title>
+<title>MiniMax H3 · ComfyUI Prompter</title>
 <style>
   :root {
     --bg: #0f1115; --panel: #1a1d24; --border: #2a2f3a; --text: #e6e9ef;
@@ -89,13 +89,24 @@
     padding: 10px 12px; color: #c9d4ea; margin: 8px 0 12px;
   }
   .loop-status { font-size: 0.84rem; color: #c5d4ff; margin-bottom: 10px; }
+  .profile-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  @media (max-width: 820px) { .profile-row { grid-template-columns: 1fr; } }
+  .profile-btn {
+    text-align: left; background: #141820; color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    font-weight: 500; width: 100%;
+  }
+  .profile-btn:hover { background: #1c2230; }
+  .profile-btn.active { border-color: var(--accent); background: #1a2240; box-shadow: inset 0 0 0 1px var(--accent); }
+  .profile-btn small { display: block; color: var(--muted); font-weight: 400; margin-top: 4px; font-size: 0.78rem; }
 </style>
 </head>
 <body>
-<h1>MiniMax H3 · Director</h1>
+<h1>MiniMax H3 · ComfyUI Prompter</h1>
 <p class="subtitle">
-  Idea → enhance → small VRAM clip → save → scrub a start frame → next clip → combine.
-  Diffusion models are baked to the default ComfyUI filenames. Planner (llama.cpp / Ollama) writes shot text only.
+  One HTML for <strong>Bro Desktop</strong> (local 5060&nbsp;Ti draft) and <strong>RunPod RTX PRO 6000</strong> (hero).
+  Open locally or from the pod. Idea → enhance → clip → save → scrub a start frame → next clip → concat.
+  Diffusion models stay on standard Comfy folder basenames — no model picker.
 </p>
 <ol class="flow-steps">
   <li><strong>1</strong> idea</li>
@@ -108,6 +119,33 @@
 </ol>
 
 <div class="grid">
+  <div class="panel full">
+    <h2>Target profile</h2>
+    <p class="hint">Same UI and same workflow emit path. Profile only changes MP budget, steps, and suggested Comfy/output defaults.</p>
+    <div class="profile-row">
+      <button type="button" class="profile-btn active" id="profileLocal" data-profile="local">
+        Local draft (Bro)
+        <small>RTX 5060&nbsp;Ti–class · ~0.4&nbsp;MP · 12 steps · iterate on the desktop</small>
+      </button>
+      <button type="button" class="profile-btn" id="profileRunpod" data-profile="runpod">
+        RunPod PRO 6000 (hero)
+        <small>96&nbsp;GB · ~1&nbsp;MP · 25 steps · finals on a rented 6000</small>
+      </button>
+    </div>
+    <div class="row">
+      <div>
+        <label>ComfyAPI base URL (optional)</label>
+        <input id="comfyApi" placeholder="http://127.0.0.1:8188" value="">
+        <p class="hint" id="comfyApiHint">Leave blank if you drag JSON into Comfy. Local default is <code>http://127.0.0.1:8188</code>. On RunPod you can paste the <code>…-8188.proxy.runpod.net</code> URL.</p>
+      </div>
+      <div>
+        <label>Save prefix (under Comfy <code>output/</code>)</label>
+        <input id="savePrefix" value="video/MiniMax_H3">
+        <p class="hint">Basename only — works on Bro and the pod. Example: <code>video/MiniMax_H3_seg01.mp4</code>.</p>
+      </div>
+    </div>
+  </div>
+
   <div class="panel">
     <h2>1. Idea &amp; length</h2>
     <label>Raw idea</label>
@@ -134,11 +172,11 @@
         <input id="startImage" value="h3_chain/next_start.png">
       </div>
     </div>
-    <p class="hint">Handoff path: <code>ComfyUI/input/h3_chain/next_start.png</code>. Capture a frame below, then copy or run the helper so LoadImage can see it.</p>
+    <p class="hint">Relative to Comfy <code>input/</code> on whichever machine runs the graph (Bro or the pod). Capture a frame below, then drop the PNG there.</p>
   </div>
 
   <div class="panel">
-    <h2>2. Planner (llama.cpp on the pod)</h2>
+    <h2>2. Planner (llama.cpp / Ollama)</h2>
     <label>Provider</label>
     <select id="provider">
       <option value="llamacpp" selected>llama.cpp (OpenAI-compatible, local)</option>
@@ -156,11 +194,9 @@
       <input id="llamaUrl" value="">
       <label>Model id (llama-server often ignores this)</label>
       <input id="llamaModel" value="local">
-      <p class="hint">
-        Open this HTML from <strong>JupyterLab on the pod</strong> (Chromebook cannot run llama.cpp).
-        Leave the URL blank to auto-use <code>https://POD-8081.proxy.runpod.net/v1</code>
-        (pod HTTP port <strong>8081</strong> — 8080 is FileBrowser, 8188 is Comfy, 8888 is Jupyter).
-        llama-server should bind <code>0.0.0.0:8081</code> on CPU, not the 6000.
+      <p class="hint" id="llamaHint">
+        Local: <code>http://127.0.0.1:8081/v1</code>. On a RunPod page, leave blank to auto-use
+        <code>https://POD-8081.proxy.runpod.net/v1</code> (8081 planner, 8188 Comfy). Planner is CPU text only.
       </p>
     </div>
     <div id="ollamaGroup" style="display:none">
@@ -178,16 +214,16 @@
 
   <div class="panel full">
     <h2>3. Canvas (aspect, not megapixels)</h2>
-    <div class="warn-box">
-      Default is a <strong>Bro-class draft</strong> (~0.4 MP, multiple of 32). Hero is the native ~1 MP canvas (16:9 = 1344×768).
-      UNET / CLIP / VAE / LoRA stay on disk defaults — no model picker. Turbo LoRA stays <strong>off</strong> unless you open Advanced.
+    <div class="warn-box" id="profileWarn">
+      <strong>Local draft (Bro)</strong> — ~0.4 MP, 12 steps. Switch the target profile above for RunPod PRO 6000 hero (~1 MP, 25 steps).
+      UNET / CLIP / VAE / LoRA stay on standard Comfy folder basenames. Turbo LoRA stays <strong>off</strong> unless you open Advanced.
     </div>
     <div class="row">
       <div>
-        <label>Quality</label>
+        <label>Quality override</label>
         <select id="qualityMode">
-          <option value="draft" selected>Draft — ~0.4 MP, 12 steps (iterate)</option>
-          <option value="hero">Hero — ~1 MP, 25 steps (finals only)</option>
+          <option value="draft" selected>Draft — ~0.4 MP (local / iterate)</option>
+          <option value="hero">Hero — ~1 MP (PRO 6000 finals)</option>
         </select>
       </div>
       <div>
@@ -263,7 +299,7 @@
       <button id="btnGenerateShot">Download this shot JSON</button>
       <button id="btnGenerate" class="secondary">Download all-shots JSON</button>
     </div>
-    <p class="hint">This shot → one I2V clip saved as <code>video/MiniMax_H3_PRO6000_segNN</code>. All-shots keeps the v13 sampler graph (auto-join). After each clip, scrub a frame for the next start image, then concat with the helper.</p>
+    <p class="hint" id="saveHint">This shot → one I2V clip under the save prefix + <code>_segNN</code>. All-shots keeps the v13 sampler graph (auto-join). After each clip, download it if you rendered on the pod, then scrub a start frame here.</p>
     <div id="status" class="status"></div>
   </div>
 
@@ -271,17 +307,18 @@
     <h2>5. Scrub → snapshot → next start frame</h2>
     <p class="loop-status" id="loopStatus">Loop: render shot 1 → capture a PNG → set as shot 2 start → repeat → concat.</p>
     <p class="hint">
-      Auto last-frame wiring (Long generator / sampler memory) often picks a smear or blink.
-      Pick the frame you actually want as <code>LoadImage</code> / <code>first_frame</code> for the next clip.
+      Portable path: pick a clip in this browser (file from Bro, or an mp4 you downloaded from the pod).
+      Scrub and <strong>Capture frame</strong> — that PNG is the next <code>LoadImage</code> / <code>first_frame</code>.
+      Auto last-frame joins are the weak continuity path.
     </p>
     <div class="row">
       <div>
-        <label>Open a local clip (mp4)</label>
+        <label>Open a clip (local file or downloaded pod mp4)</label>
         <input type="file" id="clipFile" accept="video/mp4,video/webm,video/quicktime,video/*">
       </div>
       <div>
-        <label>Or paste a path for the helper script</label>
-        <input id="clipPath" placeholder="C:\ComfyUI\output\video\MiniMax_H3_PRO6000_seg01.mp4">
+        <label>Optional path for a disk helper (any OS)</label>
+        <input id="clipPath" placeholder="output/video/MiniMax_H3_seg01.mp4">
       </div>
     </div>
     <video id="scrubVideo" class="scrub" controls playsinline></video>
@@ -294,37 +331,37 @@
       <button id="btnCopyHelper" class="secondary">Copy helper command</button>
     </div>
     <img id="framePreview" class="frame-preview" alt="Captured start frame">
-    <p class="hint" id="captureHint">Capture exports a PNG download and remembers it as the next start frame. The browser cannot write into Comfy <code>input/</code> from file:// — drop the PNG there or run the script.</p>
-    <label>ComfyUI root (for the helper)</label>
-    <input id="comfyRoot" placeholder="C:\ComfyUI">
-    <label>One-click helper (PowerShell + ffmpeg)</label>
-    <div class="cmd" id="helperCmd">.\scripts\h3_capture_next_start.ps1 -Video "C:\path\seg01.mp4" -Time 0.00 -ComfyRoot "C:\ComfyUI" -OutRel "h3_chain/next_start.png"</div>
+    <p class="hint" id="captureHint">In-page capture is the portable path: PNG download + remember as next start. The browser cannot write Comfy <code>input/</code> from file:// — drop the PNG into that folder on Bro or on the pod.</p>
+    <label>ComfyUI root (optional — disk helpers only)</label>
+    <input id="comfyRoot" placeholder="/path/to/ComfyUI">
+    <label>Optional disk helper (POSIX + Windows). In-page capture does not need this.</label>
+    <div class="cmd" id="helperCmd">scripts/h3_capture_next_start.sh --video output/video/MiniMax_H3_seg01.mp4 --time 0.00 --out-rel h3_chain/next_start.png</div>
     <details>
-      <summary>LosslessCut on Windows (Bro: <code>LosslessCut.exe</code> via winget)</summary>
+      <summary>LosslessCut on Windows (optional — Bro may have <code>LosslessCut.exe</code> via winget)</summary>
       <ol class="tips" style="margin-top:10px">
-        <li>Install if needed: <code>winget install mifi.losslesscut</code></li>
-        <li>Open the finished clip (or run the helper with <code>-LaunchLosslessCut</code>).</li>
-        <li>Scrub to the join you want. Export the current frame as PNG (screenshot / export frame).</li>
-        <li>Save as <code>ComfyUI\input\h3_chain\next_start.png</code>.</li>
-        <li>This page already points LoadImage at <code>h3_chain/next_start.png</code>. Download the next shot JSON and queue it.</li>
+        <li>Not required. In-page Capture frame works on any OS.</li>
+        <li>Install if you want it: <code>winget install mifi.losslesscut</code></li>
+        <li>Open the finished clip (local render or a file downloaded from the pod).</li>
+        <li>Export the current frame as PNG into Comfy <code>input/h3_chain/next_start.png</code>.</li>
       </ol>
-      <div class="cmd">.\scripts\h3_capture_next_start.ps1 -Video "C:\ComfyUI\output\video\MiniMax_H3_PRO6000_seg01.mp4" -LaunchLosslessCut</div>
+      <div class="cmd" id="losslessCmd">scripts/h3_capture_next_start.ps1 -Video "output/video/MiniMax_H3_seg01.mp4" -LaunchLosslessCut</div>
     </details>
     <details>
       <summary>Combine clips at the end (ffmpeg concat, no new Comfy nodes)</summary>
-      <p class="hint" style="margin-top:10px">After seg01..segN are on disk, stitch without re-encoding:</p>
-      <div class="cmd" id="concatCmd">.\scripts\h3_capture_next_start.ps1 -ConcatClips "C:\ComfyUI\output\video\MiniMax_H3_PRO6000_seg01.mp4","C:\ComfyUI\output\video\MiniMax_H3_PRO6000_seg02.mp4" -ConcatOut "C:\ComfyUI\output\video\MiniMax_H3_PRO6000_final.mp4"</div>
+      <p class="hint" style="margin-top:10px">After seg01..segN are on disk (Bro or downloaded from the pod), stitch without re-encoding:</p>
+      <div class="cmd" id="concatCmd">scripts/h3_capture_next_start.sh --concat output/video/MiniMax_H3_seg01.mp4 --concat output/video/MiniMax_H3_seg02.mp4 --concat-out output/video/MiniMax_H3_final.mp4</div>
     </details>
   </div>
 
   <div class="panel full">
     <h2>What this graph is</h2>
     <ul class="tips">
-      <li>Same Joey <code>H3MultishotMemorySampler</code> v13 graph. Models are hardcoded: <code>minimax_h3_fl2va_int8_convrot.safetensors</code>, matching video/audio VAEs, Qwen CLIP, turbo LoRA present but off.</li>
+      <li><strong>Dual-target:</strong> Local draft (Bro / 5060&nbsp;Ti) and RunPod PRO 6000 (hero) share this page and the same emit path.</li>
+      <li>Same Joey <code>H3MultishotMemorySampler</code> v13 graph. Models are hardcoded to standard Comfy folder basenames: <code>minimax_h3_fl2va_int8_convrot.safetensors</code>, matching video/audio VAEs, Qwen CLIP, turbo LoRA present but off.</li>
       <li>UNET → Sage <code>sageattn_qk_int8_pv_fp16_cuda</code> → Spectrum → sampler. No model catalog in this UI or in the emitted notes.</li>
       <li>Needs: <code>ComfyUI-H3-Multishot</code>, Spectrum MiniMax H3, KJNodes. Motion-Context only if you pick <code>context_pin</code>.</li>
-      <li>Recommended loop: one shot per JSON with a human-picked start PNG. All-shots JSON still auto-joins (weaker continuity).</li>
-      <li>Start image must sit in ComfyUI <code>input/</code> (use <code>h3_chain/next_start.png</code>).</li>
+      <li>Recommended loop: one shot per JSON with a human-picked start PNG (works if the clip was rendered on the pod and downloaded). All-shots JSON still auto-joins (weaker continuity).</li>
+      <li>Start image is a Comfy <code>input/</code> basename (default <code>h3_chain/next_start.png</code>) — not a Bro-only <code>C:\</code> path.</li>
       <li>llama.cpp / Ollama write shot text only. They do not run on the GPU and are not Comfy nodes.</li>
     </ul>
   </div>
@@ -2991,6 +3028,32 @@ const QUALITY = {
   hero: { mp: 0.98, steps: 25 }
 };
 
+const PROFILES = {
+  local: {
+    id: "local",
+    quality: "draft",
+    steps: 12,
+    prefix: "video/MiniMax_H3",
+    title: "Local draft (Bro)",
+    warn: "<strong>Local draft (Bro)</strong> — ~0.4 MP, 12 steps on a 5060&nbsp;Ti–class card. Same emit path as RunPod; only the budget changes.",
+    comfyPlaceholder: "http://127.0.0.1:8188",
+    llamaHint: "Local: <code>http://127.0.0.1:8081/v1</code> or leave blank. Planner is CPU text only — it does not need the GPU."
+  },
+  runpod: {
+    id: "runpod",
+    quality: "hero",
+    steps: 25,
+    prefix: "video/MiniMax_H3_PRO6000",
+    title: "RunPod PRO 6000 (hero)",
+    warn: "<strong>RunPod PRO 6000 (hero)</strong> — ~1 MP, 25 steps on a rented 96&nbsp;GB card. Download clips to this browser to scrub start frames. Do not iterate prompts at hero size.",
+    comfyPlaceholder: "https://POD-8188.proxy.runpod.net",
+    llamaHint: "On a RunPod page, leave the llama URL blank to auto-use <code>https://POD-8081.proxy.runpod.net/v1</code> (8081 planner, 8188 Comfy). Planner is CPU text only."
+  }
+};
+
+let currentProfileId = "local";
+let prefixTouched = false;
+
 const KNOWN_SIZES = {
   "draft|16:9": [864, 480],
   "draft|9:16": [480, 864],
@@ -3037,9 +3100,45 @@ function aspectSpec() {
 function updateSizeLabel() {
   const s = currentSize();
   $("sizePill").textContent = `${s.aspect} · ${s.width}×${s.height} · ${s.mp.toFixed(2)} MP`;
+  const profile = PROFILES[currentProfileId] || PROFILES.local;
   $("sizeHint").textContent = s.quality === "draft"
-    ? `Draft default (~0.4 MP, multiple of 32). Bro-class VRAM.`
-    : `Hero native-class canvas. Do not push past ~1 MP.`;
+    ? `Draft ~0.4 MP (multiple of 32) — ${profile.title}.`
+    : `Hero ~1 MP native-class canvas — ${profile.title}. Do not push past ~1 MP.`;
+}
+
+function guessComfyApi() {
+  const host = location.hostname || "";
+  const m = host.match(/^([a-z0-9]+)-\d+\.proxy\.runpod\.net$/i);
+  if (m) return "https://" + m[1] + "-8188.proxy.runpod.net";
+  if (location.protocol.startsWith("http") && host && host !== "localhost" && host !== "127.0.0.1") {
+    return location.protocol + "//" + host.replace(/:\d+$/, "") + ":8188";
+  }
+  return "http://127.0.0.1:8188";
+}
+
+function applyProfile(id, opts) {
+  const keepPrefix = opts && opts.keepPrefix;
+  const profile = PROFILES[id] || PROFILES.local;
+  currentProfileId = profile.id;
+  try { localStorage.setItem("h3_prompter_profile", profile.id); } catch (e) {}
+  $("profileLocal").classList.toggle("active", profile.id === "local");
+  $("profileRunpod").classList.toggle("active", profile.id === "runpod");
+  $("qualityMode").value = profile.quality;
+  if ($("haveTurbo").value !== "yes") $("steps").value = String(profile.steps);
+  if (!keepPrefix && !prefixTouched) $("savePrefix").value = profile.prefix;
+  $("comfyApi").placeholder = profile.comfyPlaceholder;
+  if (!$("comfyApi").value.trim() && profile.id === "runpod") {
+    const guessed = guessComfyApi();
+    if (/runpod\.net/i.test(guessed)) $("comfyApi").value = guessed;
+  }
+  $("profileWarn").innerHTML = profile.warn +
+    " UNET / CLIP / VAE / LoRA stay on standard Comfy folder basenames. Turbo LoRA stays <strong>off</strong> unless you open Advanced.";
+  $("llamaHint").innerHTML = profile.llamaHint;
+  $("comfyApiHint").textContent = profile.id === "runpod"
+    ? "Optional. Paste the RunPod Comfy proxy (port 8188) if you already have it. Leave blank if you download JSON and drag it into Comfy."
+    : "Optional. Local Comfy is usually http://127.0.0.1:8188. Leave blank if you drag JSON into Comfy.";
+  renderAspectButtons();
+  updateHint();
 }
 
 function renderAspectButtons() {
@@ -3391,7 +3490,7 @@ function patchWorkflow(template, shots, cfg) {
           "Director loop (no model picker)",
           "",
           "1. Queue this JSON.",
-          "2. Clip saves under Comfy output/video (MiniMax_H3_PRO6000_segNN).",
+          "2. Clip saves under the configured output prefix (_segNN).",
           "3. Scrub the mp4 in the HTML director or LosslessCut.",
           "4. Capture a PNG to ComfyUI/input/h3_chain/ as the next LoadImage.",
           "5. Download the next shot JSON and repeat, then ffmpeg-concat.",
@@ -3451,6 +3550,16 @@ function patchWorkflow(template, shots, cfg) {
 
   const extra = wf.extra || {};
   extra.ds = extra.ds || {};
+  extra.h3_prompter = {
+    profile: cfg.profile || currentProfileId,
+    quality: cfg.quality,
+    aspect: cfg.aspect,
+    width: cfg.width,
+    height: cfg.height,
+    comfy_api: cfg.comfyApi || "",
+    start_image: cfg.startImage,
+    filename_prefix: cfg.filenamePrefix
+  };
   wf.extra = extra;
   return wf;
 }
@@ -3501,9 +3610,16 @@ function collectConfig(opts) {
     continuity: $("continuity").value,
     colorLevel: $("colorLevel").value,
     seedPerShot: $("seedPerShot").value === "yes",
-    filenamePrefix: (opts && opts.filenamePrefix) || "video/MiniMax_H3_PRO6000",
-    saveEveryShot: !!(opts && opts.saveEveryShot)
+    filenamePrefix: (opts && opts.filenamePrefix) || savePrefixBase(),
+    saveEveryShot: !!(opts && opts.saveEveryShot),
+    profile: currentProfileId,
+    comfyApi: ($("comfyApi").value || "").trim()
   };
+}
+
+function savePrefixBase() {
+  const raw = ($("savePrefix").value || "").trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  return raw || (PROFILES[currentProfileId] || PROFILES.local).prefix;
 }
 
 function emitWorkflow(shots, cfg, filename) {
@@ -3538,28 +3654,51 @@ function quotePs(s) {
   return '"' + String(s).replace(/"/g, '`"') + '"';
 }
 
+function looksWindowsPath(p) {
+  return /^[A-Za-z]:[\\/]/.test(p) || p.includes("\\");
+}
+
 function helperVideoPath() {
-  return ($("clipPath").value || "").trim() ||
-    "C:\\ComfyUI\\output\\video\\MiniMax_H3_PRO6000_seg" + String(workingShotIndex()).padStart(2, "0") + ".mp4";
+  const typed = ($("clipPath").value || "").trim();
+  if (typed) return typed;
+  return savePrefixBase() + "_seg" + String(workingShotIndex()).padStart(2, "0") + ".mp4";
 }
 
 function updateHelperCmd() {
   const t = Number($("scrubVideo").currentTime || 0);
-  const root = ($("comfyRoot").value || "").trim() || "C:\\ComfyUI";
+  const root = ($("comfyRoot").value || "").trim();
   const video = helperVideoPath();
   const w = workingShotIndex();
   const outRel = "h3_chain/next_start.png";
   const named = w < clampShots($("shotCount").value) ? nextStartName(w) : "";
-  $("helperCmd").textContent =
-    `.\\scripts\\h3_capture_next_start.ps1 -Video ${quotePs(video)} -Time ${t.toFixed(2)} -ComfyRoot ${quotePs(root)} -OutRel ${quotePs(outRel)}` +
-    (named ? ` -AlsoRel ${quotePs(named)}` : "");
+  const win = looksWindowsPath(root) || looksWindowsPath(video);
+  const shRoot = root ? ` --comfy-root ${quotePs(root)}` : "";
+  const psRoot = root ? ` -ComfyRoot ${quotePs(root)}` : "";
+  const alsoSh = named ? ` --also-rel ${quotePs(named)}` : "";
+  const alsoPs = named ? ` -AlsoRel ${quotePs(named)}` : "";
+  const sh = `scripts/h3_capture_next_start.sh --video ${quotePs(video)} --time ${t.toFixed(2)}${shRoot} --out-rel ${quotePs(outRel)}${alsoSh}`;
+  const ps = `.\\scripts\\h3_capture_next_start.ps1 -Video ${quotePs(video)} -Time ${t.toFixed(2)}${psRoot} -OutRel ${quotePs(outRel)}${alsoPs}`;
+  $("helperCmd").textContent = win ? (ps + "\n\n" + sh) : (sh + "\n\n" + ps);
+  if ($("losslessCmd")) {
+    $("losslessCmd").textContent =
+      `.\\scripts\\h3_capture_next_start.ps1 -Video ${quotePs(video)} -LaunchLosslessCut`;
+  }
   const n = clampShots($("shotCount").value);
-  const clips = [];
+  const prefix = savePrefixBase();
+  const shClips = [];
+  const psClips = [];
   for (let i = 1; i <= n; i++) {
-    clips.push(quotePs(`C:\\ComfyUI\\output\\video\\MiniMax_H3_PRO6000_seg${String(i).padStart(2, "0")}.mp4`));
+    const clip = `${prefix}_seg${String(i).padStart(2, "0")}.mp4`;
+    shClips.push(`--concat ${quotePs(clip)}`);
+    psClips.push(quotePs(clip));
   }
   $("concatCmd").textContent =
-    `.\\scripts\\h3_capture_next_start.ps1 -ConcatClips ${clips.join(",")} -ConcatOut ${quotePs("C:\\ComfyUI\\output\\video\\MiniMax_H3_PRO6000_final.mp4")}`;
+    `scripts/h3_capture_next_start.sh ${shClips.join(" ")} --concat-out ${quotePs(prefix + "_final.mp4")}\n\n` +
+    `.\\scripts\\h3_capture_next_start.ps1 -ConcatClips ${psClips.join(",")} -ConcatOut ${quotePs(prefix + "_final.mp4")}`;
+  if ($("saveHint")) {
+    $("saveHint").textContent =
+      `This shot → one I2V clip as ${prefix}_segNN. All-shots keeps the v13 sampler graph (auto-join). After each clip — including ones downloaded from a pod — scrub a start frame here.`;
+  }
 }
 
 function formatTime(sec) {
@@ -3582,7 +3721,7 @@ function syncScrubFromVideo() {
 function captureFrame() {
   const v = $("scrubVideo");
   if (!v.videoWidth) {
-    setStatus("error", "Open a local mp4 first, then scrub to the join you want.");
+    setStatus("error", "Pick an mp4 first (local render or a clip downloaded from the pod), then scrub to the join you want.");
     return;
   }
   const canvas = document.createElement("canvas");
@@ -3604,7 +3743,7 @@ function captureFrame() {
     img.style.display = "block";
     $("startImage").value = inputRel;
     $("captureHint").textContent =
-      `Captured ${canvas.width}×${canvas.height} at ${formatTime(v.currentTime)}s. Downloaded ${fileBase}. Copy to ComfyUI/input/${inputRel} (and optionally ${nextStartName(w)}) or run the helper.`;
+      `Captured ${canvas.width}×${canvas.height} at ${formatTime(v.currentTime)}s. Downloaded ${fileBase}. Place it at Comfy input/${inputRel} on Bro or on the pod (browser cannot write that folder).`;
     setStatus("success", `Start frame ready: ${inputRel}. Download shot ${nextIdx} JSON after the PNG is in input/.`);
     updateHelperCmd();
   }, "image/png");
@@ -3624,10 +3763,15 @@ $("provider").addEventListener("change", toggleProvider);
 $("duration").addEventListener("input", updateHint);
 $("shotCount").addEventListener("input", () => { updateHint(); renderShots(); });
 $("workingShot").addEventListener("input", updateHint);
+$("profileLocal").addEventListener("click", () => applyProfile("local"));
+$("profileRunpod").addEventListener("click", () => applyProfile("runpod"));
+$("savePrefix").addEventListener("input", () => { prefixTouched = true; updateHelperCmd(); });
+$("comfyApi").addEventListener("input", updateHelperCmd);
 $("qualityMode").addEventListener("change", () => {
   const q = $("qualityMode").value === "hero" ? "hero" : "draft";
   if ($("haveTurbo").value !== "yes") $("steps").value = String(QUALITY[q].steps);
   renderAspectButtons();
+  updateHint();
 });
 $("haveTurbo").addEventListener("change", () => {
   if ($("haveTurbo").value === "yes") $("steps").value = 8;
@@ -3703,28 +3847,33 @@ $("btnGenerateShot").addEventListener("click", () => {
   const idx = Math.min(shots.length, cfg.working);
   const one = [shots[idx - 1]];
   cfg.total = cfg.per;
-  cfg.filenamePrefix = `video/MiniMax_H3_PRO6000_seg${String(idx).padStart(2, "0")}`;
+  cfg.filenamePrefix = `${savePrefixBase()}_seg${String(idx).padStart(2, "0")}`;
   cfg.saveEveryShot = false;
-  if (!emitWorkflow(one, cfg, `minimaxH3_PRO6000_seg${String(idx).padStart(2, "0")}.json`)) return;
+  const jsonName = `${savePrefixBase().split("/").pop()}_seg${String(idx).padStart(2, "0")}.json`;
+  if (!emitWorkflow(one, cfg, jsonName)) return;
   setStatus("success",
-    `Shot ${idx}/${shots.length} JSON · ${cfg.aspect} ${cfg.width}×${cfg.height} · ${cfg.steps} steps · start ${cfg.startImage} · ${DEFAULT_MODELS.unetName}. Save clip, scrub, capture next start.`);
+    `${cfg.profile === "runpod" ? "PRO 6000" : "Local draft"} · shot ${idx}/${shots.length} · ${cfg.aspect} ${cfg.width}×${cfg.height} · ${cfg.steps} steps · start ${cfg.startImage}. Save clip, scrub, capture next start.`);
 });
 
 $("btnGenerate").addEventListener("click", () => {
   const shots = plannedShots();
   if (!shots) return;
   const cfg = collectConfig({
-    filenamePrefix: "video/MiniMax_H3_PRO6000",
+    filenamePrefix: savePrefixBase(),
     saveEveryShot: true
   });
-  if (!emitWorkflow(shots, cfg, `minimaxH3_PRO6000_cinematic_${shots.length}shot.json`)) return;
+  const jsonName = `${savePrefixBase().split("/").pop()}_${shots.length}shot.json`;
+  if (!emitWorkflow(shots, cfg, jsonName)) return;
   setStatus("success",
-    `All-shots JSON: ${shots.length} shots · ${cfg.aspect} ${cfg.width}×${cfg.height} · ${cfg.continuity} · ${cfg.steps} steps. Sampler auto-join is weaker than human-picked start frames.`);
+    `${cfg.profile === "runpod" ? "PRO 6000 hero" : "Local draft"} all-shots: ${shots.length} shots · ${cfg.aspect} ${cfg.width}×${cfg.height} · ${cfg.steps} steps. Sampler auto-join is weaker than human-picked start frames.`);
 });
 
 toggleProvider();
-renderAspectButtons();
-updateHint();
+try {
+  const saved = localStorage.getItem("h3_prompter_profile");
+  if (saved === "runpod" || saved === "local") currentProfileId = saved;
+} catch (e) {}
+applyProfile(currentProfileId, { keepPrefix: false });
 renderShots();
 </script>
 </body>

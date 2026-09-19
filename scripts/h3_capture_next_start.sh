@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# POSIX twin of h3_capture_next_start.ps1 for Linux pods / CI.
+# POSIX twin of h3_capture_next_start.ps1 (Bro, RunPod, or CI).
+# In-page HTML capture is the portable path; this writes Comfy input/ when you want it.
 # Extract a frame at timestamp T into ComfyUI/input, or concat clips.
 set -euo pipefail
 

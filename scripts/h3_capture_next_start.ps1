@@ -4,14 +4,17 @@
   optionally launch LosslessCut, optionally concat finished clips.
 
 .DESCRIPTION
-  Browsers cannot write into ComfyUI/input/ from a local HTML file. After you
-  scrub a finished segNN.mp4 (in the PRO6000 director or LosslessCut), run this
-  so LoadImage can see h3_chain/next_start.png for the next shot.
+  Optional disk helper for the ComfyUI Prompter HTML (Bro desktop or RunPod).
+  In-page Capture frame is the portable path — this script is only needed when
+  you want ffmpeg to write ComfyUI/input/h3_chain/next_start.png for you.
 
-  Requires ffmpeg on PATH. LosslessCut is optional (winget install mifi.losslesscut).
+  ComfyRoot is optional and not Bro-specific. Pass whatever machine is running
+  Comfy (C:\ComfyUI, /workspace/ComfyUI, a RunPod volume, …).
+
+  Requires ffmpeg on PATH. LosslessCut is an optional Windows extra.
 
 .EXAMPLE
-  .\scripts\h3_capture_next_start.ps1 -Video "C:\ComfyUI\output\video\MiniMax_H3_PRO6000_seg01.mp4" -Time 9.42 -ComfyRoot "C:\ComfyUI"
+  .\scripts\h3_capture_next_start.ps1 -Video "output\video\MiniMax_H3_seg01.mp4" -Time 9.42 -ComfyRoot "C:\ComfyUI"
 
 .EXAMPLE
   .\scripts\h3_capture_next_start.ps1 -Video "D:\seg01.mp4" -LaunchLosslessCut
