@@ -604,5 +604,120 @@ $("btnSeg").onclick=()=>{ try{ JSON.parse($("segmentsJson").value); const a=docu
 
 renderEngines(); updateCalc(); renderModels();
 </script>
+<script>
+/* ComfyUI API-format export (added for LM Studio / /prompt use) */
+(function(){
+  const SKIP = new Set(["Note","MarkdownNote","PrimitiveNode","Reroute"]);
+  const UI_ONLY = new Set(["control_after_generate","control_before_generate","upload","fixed","randomize"]);
+  const KNOWN = {"UNETLoader":["unet_name","weight_dtype"],"CLIPLoader":["clip_name","type","device"],"VAELoader":["vae_name"],"LatentUpscaleModelLoader":["model_name"],"KSamplerSelect":["sampler_name"],"ManualSigmas":["sigmas"],"RandomNoise":["noise_seed","control_after_generate"],"CLIPTextEncode":["text"],"LTXVConditioning":["frame_rate"],"EmptyLTXVLatentVideo":["width","height","length","batch_size"],"LTXVEmptyLatentAudio":["frames_number","frame_rate","batch_size"],"LTXVDualCFGGuider":["video_cfg","audio_cfg"],"VAEDecodeTiled":["tile_size","overlap","temporal_size","temporal_overlap"],"CreateVideo":["fps","bit_depth"],"ImageFromBatch":["batch_index","length"],"SaveVideo":["filename_prefix","format","codec"],"LTXVImgToVideoInplace":["strength","bypass"],"LTXVAddGuide":["frame_idx","strength"],"AudioConcat":["direction"],"LoadImage":["image","upload"],"EasyCache":["reuse_threshold","start_percent","end_percent","verbose"],"PathchSageAttentionKJ":["sage_attention","allow_compile"],"PrimitiveInt":["value","fixed"],"MiniMaxH3ImageToVideo":["prompt","width","height","length"],"BasicScheduler":["scheduler","steps","denoise"],"PrimitiveFloat":["value"],"PrimitiveBoolean":["value"],"PrimitiveStringMultiline":["value"],"LoraLoaderModelOnly":["lora_name","strength_model"]};
+  const PROMPT_KEYS = ["prompt","text","script","value","positive","prompts"];
+  function linkMap(links){ const m={}; (links||[]).forEach(l=>{ if(Array.isArray(l)) m[l[0]]={o:l[1],os:l[2],t:l[3],ts:l[4]}; else if(l) m[l.id]={o:l.origin_id,os:l.origin_slot,t:l.target_id,ts:l.target_slot}; }); return m; }
+  function toApi(wf, opts){
+    opts = opts||{};
+    const subs = {}; (((wf.definitions||{}).subgraphs)||[]).forEach(s=>subs[s.id]=s);
+    const out = {}; const promptNodes = [];
+    // ctx: {nodes, links(map), prefix, parent:{instance, ctx}}
+    function nodeById(ctx,id){ return ctx.byId[id]; }
+    // resolve the source feeding (ctx, link id) -> [apiId, slot] | {value} | null
+    function resolveLink(ctx, linkId, depth){
+      if (linkId==null || depth>64) return null;
+      const l = ctx.links[linkId]; if(!l) return null;
+      return resolveOutput(ctx, l.o, l.os, depth+1);
+    }
+    function resolveOutput(ctx, nodeId, slot, depth){
+      if (depth>64) return null;
+      if (nodeId === -10) { // subgraph input
+        const p = ctx.parent; if(!p) return null;
+        const inst = p.inst; const sg = ctx.sg; const inpDef = (sg.inputs||[])[slot];
+        const instIn = (inst.inputs||[]).find(i=>inpDef && i.name===inpDef.name);
+        if (instIn && instIn.link!=null) return resolveLink(p.ctx, instIn.link, depth+1);
+        const named = inst.widgets_values_named||{};
+        if (inpDef && Object.prototype.hasOwnProperty.call(named, inpDef.name)) return {value: named[inpDef.name]};
+        return null;
+      }
+      const n = nodeById(ctx,nodeId); if(!n) return null;
+      if (subs[n.type]) { // subgraph instance output
+        const inner = ctxFor(subs[n.type], n, ctx);
+        const l = Object.values(inner.links).find(x=>x.t===-20 && x.ts===slot);
+        return l ? resolveOutput(inner, l.o, l.os, depth+1) : null;
+      }
+      if (n.type==="Reroute" || n.mode===4) { // pass-through
+        const outType = ((n.outputs||[])[slot]||{}).type;
+        const ins = (n.inputs||[]).filter(i=>i.link!=null);
+        const pick = ins.find(i=>i.type===outType) || (n.type==="Reroute"?ins[0]:null);
+        return pick ? resolveLink(ctx, pick.link, depth+1) : null;
+      }
+      if (n.mode===2 || SKIP.has(n.type)) return null;
+      return [ctx.prefix + n.id, slot];
+    }
+    const ctxCache = new Map();
+    function ctxFor(sg, inst, parentCtx){
+      const key = parentCtx.prefix + inst.id;
+      if (ctxCache.has(key)) return ctxCache.get(key);
+      const c = { sg, nodes: sg.nodes||[], byId:{}, links: linkMap(sg.links), prefix: key+":", parent:{inst, ctx:parentCtx} };
+      c.nodes.forEach(n=>c.byId[n.id]=n); ctxCache.set(key,c); walk(c); return c;
+    }
+    function walk(ctx){
+      ctx.nodes.forEach(n=>{
+        if (subs[n.type]) { if (n.mode!==2 && n.mode!==4) ctxFor(subs[n.type], n, ctx); return; }
+        if (SKIP.has(n.type) || n.mode===2 || n.mode===4) return;
+        const inputs = {};
+        const named = n.widgets_values_named || {};
+        Object.keys(named).forEach(k=>{ if(!UI_ONLY.has(k)) inputs[k]=named[k]; });
+        if (!n.widgets_values_named && Array.isArray(n.widgets_values) && KNOWN[n.type]) {
+          KNOWN[n.type].forEach((k,i)=>{ if(i<n.widgets_values.length && !UI_ONLY.has(k)) inputs[k]=n.widgets_values[i]; });
+        } else if (!n.widgets_values_named && Array.isArray(n.widgets_values) && opts.objectInfo && opts.objectInfo[n.type]) {
+          const req = Object.assign({}, (opts.objectInfo[n.type].input||{}).required, (opts.objectInfo[n.type].input||{}).optional);
+          let i=0; Object.keys(req).forEach(k=>{ const t=req[k][0]; if(typeof t==="string" && /^[A-Z_]+$/.test(t) && !["INT","FLOAT","STRING","BOOLEAN","COMBO"].includes(t)) return; if(i<n.widgets_values.length){ inputs[k]=n.widgets_values[i++]; const c=(req[k][1]||{}); if((t==="INT"||t==="FLOAT") && (c.control_after_generate || k==="seed"||k==="noise_seed")) i++; } });
+        }
+        (n.inputs||[]).forEach(inp=>{
+          if (inp.link==null) return;
+          const src = resolveLink(ctx, inp.link, 0);
+          const name = (inp.widget && inp.widget.name) || inp.name;
+          if (Array.isArray(src)) inputs[name]=src; else if (src && "value" in src) inputs[name]=src.value;
+        });
+        const id = ctx.prefix + n.id;
+        out[id] = { class_type: n.type, inputs, _meta: { title: n.title || n.type } };
+        if (/prompt|script|text/i.test(n.title||"") || /PrimitiveString|CLIPTextEncode|ScriptSplit|Multishot|ImageToVideo/i.test(n.type)) promptNodes.push(id);
+      });
+    }
+    const root = { nodes: wf.nodes||[], byId:{}, links: linkMap(wf.links), prefix:"", parent:null };
+    root.nodes.forEach(n=>root.byId[n.id]=n); walk(root);
+    // drop dangling references to removed nodes
+    Object.values(out).forEach(o=>Object.keys(o.inputs).forEach(k=>{ const v=o.inputs[k]; if(Array.isArray(v)&&v.length===2&&typeof v[0]==="string"&&!out[v[0]]) delete o.inputs[k]; }));
+    if (opts.placeholder) {
+      let done=false;
+      for (const id of promptNodes) { const o=out[id]; for (const k of PROMPT_KEYS) { if (typeof o.inputs[k]==="string" && !/negative/i.test(o._meta.title) && o.inputs[k].trim()) { o.inputs[k]="{{PROMPT}}"; done=true; break; } } if(done) break; }
+      if(!done){ for (const o of Object.values(out)) { for (const k of PROMPT_KEYS) if (typeof o.inputs[k]==="string" && o.inputs[k].length>20 && !/negative/i.test(o._meta.title)) { o.inputs[k]="{{PROMPT}}"; done=true; break; } if(done) break; } }
+    }
+    return out;
+  }
+  window.comfyUiToApi = toApi;
+  // Hook: capture the next workflow JSON download and re-save it in API format.
+  let pending = null; const blobs = new Map();
+  const origCreate = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = function(o){ const u=origCreate(o); if (o instanceof Blob) { blobs.set(u,o); if (blobs.size>20) blobs.delete(blobs.keys().next().value); } return u; };
+  const origClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function(){
+    if (pending && this.href && this.href.startsWith("blob:") && /\.json$/i.test(this.download||"")) {
+      const mode = pending; pending = null; const a=this; const name=a.download.replace(/\.json$/i, mode==="ph"?"_api_PROMPT.json":"_api.json");
+      (blobs.get(a.href) ? blobs.get(a.href).text() : fetch(a.href).then(r=>r.text())).then(t=>JSON.parse(t)).then(wf=>{
+        const api = toApi(wf, {placeholder: mode==="ph"});
+        const b = document.createElement("a"); b.href = URL.createObjectURL(new Blob([JSON.stringify(api,null,2)],{type:"application/json"})); b.download = name; origClick.call(b);
+      }).catch(e=>alert("API export failed: "+e.message));
+      return;
+    }
+    return origClick.call(this);
+  };
+  function addButtons(){
+    const g = document.getElementById("btnGenerate"); if(!g || document.getElementById("btnApiExport")) return;
+    const mk=(id,label,mode,tip)=>{ const b=document.createElement("button"); b.id=id; b.type="button"; b.className=g.className||"secondary"; if(!b.className) b.className="secondary"; b.textContent=label; b.title=tip; b.onclick=()=>{ pending=mode; g.click(); setTimeout(()=>{pending=null;},3000); }; return b; };
+    const b1=mk("btnApiExport","Download API JSON","api","ComfyUI API format (for /prompt, scripts, LM Studio)");
+    const b2=mk("btnApiExportPh","Download API JSON ({{PROMPT}})","ph","API format with the main prompt replaced by {{PROMPT}} – drop into C:\\Users\\Daddy\\comfy-mcp\\workflows");
+    g.after(b1); b1.after(b2); g.after(document.createTextNode(" ")); b1.after(document.createTextNode(" "));
+  }
+  if (document.readyState==="loading") document.addEventListener("DOMContentLoaded", addButtons); else addButtons();
+})();
+</script>
 </body>
 </html>

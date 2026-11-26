@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiniMax H3 Long Workflow Generator V3aV1</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #6c8cff;
+    --accent-hover: #8aa4ff;
+    --success: #3ecf8e;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.55rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 12px; font-size: 0.93rem; }
+  .top-actions { margin-bottom: 18px; }
+  .top-actions .actions { margin-top: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .panel h2 { font-size: 1.05rem; margin-bottom: 14px; color: var(--accent); }
+  label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea {
+    width: 100%;
+    background: #12151b;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 9px 12px;
+    font-size: 0.93rem;
+    margin-bottom: 12px;
+  }
+  textarea { min-height: 100px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86rem; }
+  textarea.resize-both {
+    resize: both;
+    overflow: auto;
+    display: block;
+    max-width: none;
+    min-height: 120px;
+    min-width: 240px;
+  }
+  #promptPanel { overflow: visible; }
+  #promptPanel:focus-within { position: relative; z-index: 2; }
+  .actions { margin-bottom: 10px; }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.93rem;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  button:hover { background: var(--accent-hover); }
+  button.secondary { background: #2a3140; }
+  button.secondary:hover { background: #353e52; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .status {
+    margin-top: 14px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    display: none;
+  }
+  .status.info { background: #1c2433; color: #a8c0ff; display: block; }
+  .status.success { background: #14332a; color: var(--success); display: block; }
+  .status.error { background: #331c1c; color: var(--danger); display: block; }
+  .full { grid-column: 1 / -1; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: -6px; margin-bottom: 10px; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 0.88rem; }
+  .mode-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: #243044;
+    color: #9ab0ff;
+    margin-left: 8px;
+  }
+  .clip-calc {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 0.82rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .tips-list {
+    font-size: 0.85rem;
+    color: var(--muted);
+    padding-left: 18px;
+  }
+  .tips-list li { margin-bottom: 7px; }
+  .tips-list strong { color: var(--text); }
+  .speed-note {
+    background: #1c2433;
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.85rem;
+    margin-top: 12px;
+    color: #b8c7e6;
+  }
+</style>
+</head>
+<body>
+
+<h1>MiniMax H3 Long Workflow Generator V3aV1 <span class="mode-badge" id="modeBadge">T2V</span></h1>
+<p class="subtitle">Browser-based • API optional • Grok, LM Studio, or any OpenAI-compatible host • Size presets • Text-to-Video or Image-to-Video • Seamless clip chaining</p>
+<p class="subtitle">V3aV1: same V3 prompt guide and last-frame chaining, plus optional overlap crossfade, color match, and RIFE — all using real ComfyUI / KJNodes / H3 Multishot nodes (no invented Hermes nodes).</p>
+
+<div class="top-actions">
+  <div class="actions">
+    <button id="btnPlan">Generate Segments (local)</button>
+    <button id="btnGenerate" class="secondary">Generate Workflow JSON</button>
+    <button id="btnDownloadSeg" class="secondary">Download segments.json</button>
+    <button id="btnClearVram" class="secondary" title="Unload models from ComfyUI memory (POST /free) using the ComfyUI URL under Advanced model names">Clear VRAM</button>
+  </div>
+  <div id="status" class="status"></div>
+</div>
+
+<div class="grid">
+
+  <!-- Prompt -->
+  <div class="panel" id="promptPanel">
+    <h2>1. Prompt & Duration</h2>
+    <label>Raw prompt / idea</label>
+    <textarea id="userPrompt" class="resize-both" placeholder="A skilled middle-aged chef preparing classic French onion soup from start to finish in a professional kitchen..."></textarea>
+    <p class="hint">Drag the corner to widen the box or make it taller.</p>
+
+    <div class="row">
+      <div>
+        <label>Total duration (seconds)</label>
+        <input type="number" id="duration" value="60" min="4" max="600" step="1">
+      </div>
+      <div>
+        <label>Target segment / clip length (s)</label>
+        <input type="number" id="segLen" value="4" min="3" max="15" step="0.5">
+      </div>
+    </div>
+    <p class="hint">
+      Live calc: <span class="clip-calc" id="clipCalc">≈ 15 clips</span>
+      &nbsp;·&nbsp; Example: 60 s + 4 s → 15 clips. 60 s + 10 s → 6 clips.
+    </p>
+  </div>
+
+  <!-- Provider -->
+  <div class="panel">
+    <h2>2. LLM Provider (optional)</h2>
+    <label>Provider</label>
+    <select id="provider">
+      <option value="none">None / Local generator (no API)</option>
+      <option value="xai">Grok (xAI)</option>
+      <option value="lmstudio">LM Studio (local)</option>
+      <option value="custom">Custom (OpenAI-compatible)</option>
+      <option value="openai">OpenAI</option>
+      <option value="anthropic">Anthropic</option>
+      <option value="ollama">Ollama (local)</option>
+    </select>
+
+    <div id="apiKeyGroup" style="display:none">
+      <label id="apiKeyLabel">API Key (stored only in this browser)</label>
+      <input type="password" id="apiKey" placeholder="sk-... or xai-...">
+      <p class="hint" id="apiKeyHint">Keys stay in localStorage. A page opened from disk can be blocked by browser CORS on cloud and local servers.</p>
+    </div>
+
+    <div id="grokModelGroup" style="display:none">
+      <label>Grok model</label>
+      <select id="grokModel">
+        <option value="grok-4.7" selected>grok-4.7</option>
+        <option value="grok-4.6">grok-4.6</option>
+        <option value="grok-4.5">grok-4.5</option>
+        <option value="grok-4.3">grok-4.3</option>
+        <option value="grok-4.20-0309-reasoning">grok-4.20-0309-reasoning</option>
+        <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+        <option value="grok-build-0.1">grok-build-0.1</option>
+        <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+        <option value="grok-4">grok-4</option>
+        <option value="custom">Custom model id</option>
+      </select>
+      <div class="actions">
+        <button type="button" id="btnGrokModels" class="secondary">Refresh Grok models</button>
+      </div>
+      <p class="hint">Chat model ids from the xAI API. Refresh uses your key against https://api.x.ai/v1/models. Choose Custom to type an id.</p>
+    </div>
+
+    <div id="lmstudioGroup" style="display:none">
+      <label>LM Studio base URL</label>
+      <input type="text" id="lmstudioUrl" value="http://127.0.0.1:1234/v1" placeholder="http://192.168.1.20:1234/v1">
+      <label>Loaded models</label>
+      <select id="lmstudioModelSelect">
+        <option value="">Custom / type below</option>
+      </select>
+      <label>Model id</label>
+      <input type="text" id="lmstudioModel" placeholder="model id shown in LM Studio">
+      <div class="actions">
+        <button type="button" id="btnLmModels" class="secondary">List LM Studio models</button>
+      </div>
+      <p class="hint">Another PC on the LAN: <code>http://&lt;that-pc-ip&gt;:1234/v1</code>. On that PC start the server, turn on Serve on local network, and enable CORS (this page is opened from disk). A request to <code>/models</code> without <code>/v1</code> is the wrong path. LM Studio still logs HTTP 200 for it. Load a model there before listing. Picking a listed model fills the id box.</p>
+    </div>
+
+    <div id="customGroup" style="display:none">
+      <label>Base URL (include /v1)</label>
+      <input type="text" id="customUrl" value="http://127.0.0.1:8080/v1" placeholder="https://your-host/v1">
+      <label>Listed models</label>
+      <select id="customModelSelect">
+        <option value="">Custom / type below</option>
+      </select>
+      <label>Model id</label>
+      <input type="text" id="customModel" placeholder="model id">
+      <div class="actions">
+        <button type="button" id="btnCustomModels" class="secondary">List models</button>
+      </div>
+      <p class="hint">Any host that accepts POST /v1/chat/completions — vLLM, llama.cpp, a proxy, or another LM Studio machine. Optional API key is sent as a Bearer token.</p>
+    </div>
+
+    <div id="ollamaGroup" style="display:none">
+      <label>Ollama base URL</label>
+      <input type="text" id="ollamaUrl" value="http://localhost:11434">
+      <label>Ollama model</label>
+      <input type="text" id="ollamaModel" value="qwen2.5:32b">
+    </div>
+
+    <div id="cloudModelGroup" style="display:none">
+      <label id="cloudModelLabel">Model name</label>
+      <input type="text" id="modelName" value="gpt-4o" placeholder="gpt-4o / claude-3-5-sonnet-... / custom grok id">
+    </div>
+  </div>
+
+  <!-- Mode + Settings -->
+  <div class="panel full">
+    <h2>3. Mode & Workflow Settings</h2>
+
+    <label>Generation mode</label>
+    <select id="genMode">
+      <option value="t2v" selected>Text-to-Video (no start image needed)</option>
+      <option value="i2v">Image-to-Video (requires start image)</option>
+    </select>
+
+    <div id="startImageGroup" style="display:none">
+      <label>Start image filename (must exist in ComfyUI input folder)</label>
+      <input type="text" id="startImage" value="start_frame.png">
+    </div>
+
+    <label>Output size</label>
+    <select id="sizePreset">
+      <optgroup label="Portrait 9:16">
+        <option value="480x864">480×864 · 9:16 · 0.41 MP · local 12 GB</option>
+        <option value="544x960">544×960 · 9:16 · 0.52 MP</option>
+        <option value="608x1088">608×1088 · 9:16 · 0.66 MP</option>
+        <option value="768x1344" selected>768×1344 · 9:16 · 1.03 MP · native</option>
+      </optgroup>
+      <optgroup label="Landscape 16:9">
+        <option value="864x480">864×480 · 16:9 · 0.41 MP</option>
+        <option value="960x544">960×544 · 16:9 · 0.52 MP</option>
+        <option value="1056x608">1056×608 · 16:9 · 0.64 MP</option>
+        <option value="1152x640">1152×640 · 16:9 · 0.74 MP</option>
+        <option value="1280x736">1280×736 · 16:9 · 0.94 MP</option>
+        <option value="1344x768">1344×768 · 16:9 · 1.03 MP · native</option>
+      </optgroup>
+      <optgroup label="Square 1:1">
+        <option value="512x512">512×512 · 1:1 · 0.26 MP</option>
+        <option value="768x768">768×768 · 1:1 · 0.59 MP</option>
+      </optgroup>
+      <option value="custom">Custom</option>
+    </select>
+    <div class="row">
+      <div>
+        <label>Width</label>
+        <input type="number" id="width" value="768" min="64" step="32">
+      </div>
+      <div>
+        <label>Height</label>
+        <input type="number" id="height" value="1344" min="64" step="32">
+      </div>
+      <div>
+        <label>Steps</label>
+        <input type="number" id="steps" value="8" min="4" max="30">
+      </div>
+    </div>
+    <p class="hint" id="sizeHint">768×1344 · 1.03 MP · multiple of 32</p>
+    <p class="hint">Presets are multiples of 32. Native short edge is 768 (768×1344 or 1344×768). 480×864 stays near 0.4 MP for a 12 GB card. Custom accepts any width and height. Turbo LoRA: 6–8 steps. Base model without LoRA: usually 16–20.</p>
+
+    <details id="advModels">
+      <summary>Advanced model names</summary>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>ComfyUI URL</label>
+          <input type="text" id="comfyUrl" value="http://127.0.0.1:8188" placeholder="http://127.0.0.1:8188">
+        </div>
+        <div>
+          <label>Models folder on disk</label>
+          <div class="actions">
+            <button type="button" id="btnPickModels" class="secondary">Choose models folder</button>
+          </div>
+          <input type="file" id="modelFolder" webkitdirectory directory multiple style="display:none">
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" id="btnScanModels" class="secondary">Scan ComfyUI model folders</button>
+      </div>
+      <p class="hint" id="modelScanHint">UNET uses diffusion_models and unet. CLIP uses text_encoders and clip. Both VAEs use vae. Pick <code>D:\ComfyUI\ComfyUI\models</code> if ComfyUI is not running. Subfolder names are kept, because that is the loader filename.</p>
+      <div class="row">
+        <div>
+          <label>UNET</label>
+          <select id="unetSelect"><option value="">Custom / type below</option></select>
+          <input type="text" id="unetName" value="minimax_h3_fl2va_pruned_int8_convrot.safetensors">
+        </div>
+        <div>
+          <label>CLIP</label>
+          <select id="clipSelect"><option value="">Custom / type below</option></select>
+          <input type="text" id="clipName" value="qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Video VAE</label>
+          <select id="videoVaeSelect"><option value="">Custom / type below</option></select>
+          <input type="text" id="videoVae" value="minimax_h3_video_vae_fp16.safetensors">
+        </div>
+        <div>
+          <label>Audio VAE</label>
+          <select id="audioVaeSelect"><option value="">Custom / type below</option></select>
+          <input type="text" id="audioVae" value="minimax_h3_audio_vae_fp32.safetensors">
+        </div>
+      </div>
+    </details>
+  </div>
+
+
+  <!-- Seam smoothing (V3aV1) -->
+  <div class="panel full">
+    <h2>3b. Seam smoothing (V3aV1)</h2>
+    <p class="hint">These options hide the cut between clips. Leave last-frame continuation on (that is how V3 already works). Set Overlap frames to 0 and turn Color match and RIFE off to get the original V3 ImageBatch join.</p>
+    <div class="row">
+      <div>
+        <label>Last-frame continuation</label>
+        <select id="lastFrameContinue">
+          <option value="on" selected>On (recommended)</option>
+          <option value="off">Off</option>
+        </select>
+        <p class="hint">Clip 2 and later use the previous clip’s last frame as MiniMaxH3ImageToVideo first_frame (core ImageFromBatch, index −1). No cycles — the frame is always fed into the next clip, never back into the same one.</p>
+      </div>
+      <div>
+        <label>Overlap frames (crossfade)</label>
+        <input type="number" id="overlapFrames" value="8" min="0" max="48" step="1">
+        <p class="hint">0 = plain ImageBatch join (V3). 8 frames ≈ ⅓ second at 24 fps. Uses KJNodes ImageBatchJoinWithTransition (fade). Keep this smaller than the shortest clip.</p>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Crossfade easing</label>
+        <select id="fadeInterpolation">
+          <option value="linear">linear</option>
+          <option value="ease_in">ease_in</option>
+          <option value="ease_out">ease_out</option>
+          <option value="ease_in_out" selected>ease_in_out</option>
+          <option value="bounce">bounce</option>
+          <option value="elastic">elastic</option>
+          <option value="glitchy">glitchy</option>
+          <option value="exponential_ease_out">exponential_ease_out</option>
+        </select>
+      </div>
+      <div>
+        <label>Color match</label>
+        <select id="colorMatch">
+          <option value="on" selected>On (recommended)</option>
+          <option value="off">Off</option>
+        </select>
+        <p class="hint">KJNodes ColorMatch grades each later clip to the previous clip’s last frame (method mkl, adjustable strength).</p>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Color match method</label>
+        <select id="colorMatchMethod">
+          <option value="mkl" selected>mkl</option>
+          <option value="hm">hm</option>
+          <option value="reinhard">reinhard</option>
+          <option value="mvgd">mvgd</option>
+          <option value="hm-mvgd-hm">hm-mvgd-hm</option>
+          <option value="hm-mkl-hm">hm-mkl-hm</option>
+        </select>
+      </div>
+      <div>
+        <label>Color match strength</label>
+        <input type="number" id="colorMatchStrength" value="1" min="0" max="10" step="0.05">
+      </div>
+      <div>
+        <label>Frame interpolation (RIFE)</label>
+        <select id="rifeMultiplier">
+          <option value="0" selected>Off</option>
+          <option value="2">2× (48 fps, same duration)</option>
+          <option value="4">4× (96 fps, same duration)</option>
+        </select>
+        <p class="hint">Optional. Applied to the final joined video. FPS is multiplied by the same amount so the video does not slow down and audio stays in sync.</p>
+      </div>
+    </div>
+    <div class="speed-note">
+      <strong>Custom node packs this page may add</strong> (ComfyUI Manager can install them from the cnr_id on each node):
+      <ul class="tips-list" style="margin-top:8px">
+        <li><strong>Always (same as V3)</strong>: ComfyUI core (MiniMaxH3ImageToVideo, ImageFromBatch, ImageBatch, AudioConcat, CreateVideo) and <code>comfyui-h3-multishot</code> for <code>H3AudioTrimStart</code>. Sage Attention is <code>comfyui-kjnodes</code> (<code>PathchSageAttentionKJ</code>).</li>
+        <li><strong>Overlap &gt; 0 or Color match on</strong>: <code>comfyui-kjnodes</code> — <code>ImageBatchJoinWithTransition</code> and <code>ColorMatch</code>.</li>
+        <li><strong>RIFE on</strong>: <code>comfyui-frame-interpolation</code> — <code>RIFE VFI</code> (default checkpoint rife47.pth).</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Segments -->
+  <div class="panel full">
+    <h2>4. Segments (editable)</h2>
+    <p class="hint">Paste planner JSON, edit by hand, generate locally, or let an LLM create it. Continuity language is injected automatically on non-first segments so last-frame (or latent) joins stay as seamless as possible. First segment is pure T2V when that mode is selected.</p>
+    <textarea id="segmentsJson" style="min-height:210px" placeholder='{"enhanced_overall":"...","total_seconds":60,"segments":[{"index":1,"approx_seconds":4,"prompt":"..."}]}'></textarea>
+  </div>
+
+  <!-- Speed & Seamless tips -->
+  <div class="panel full">
+    <h2>Speed & Seamless Joining</h2>
+    <ul class="tips-list">
+      <li><strong>Last-frame continuation</strong> (default on, same as V3) locks the last pixel as the next first frame, then resamples at denoise 1.0. That holds a pose. It does not carry velocity. A still cannot make motion flow. Do not use it across a location or time change.</li>
+      <li><strong>Overlap + crossfade</strong> (default 8 frames) blends the last 8 frames of clip N with the first 8 frames of clip N+1 using KJNodes <code>ImageBatchJoinWithTransition</code> (fade). The joined video is shorter by those overlap frames at each cut, and <code>H3AudioTrimStart</code> cuts the same number of seconds (overlap ÷ 24) off the start of the later clip’s audio so lip sync does not drift. With overlap set to 0 and last-frame on, V3’s 1-frame trim + ImageBatch path is used instead.</li>
+      <li><strong>Color match</strong> (default on) runs KJNodes <code>ColorMatch</code> on each later clip against the previous clip’s last frame, then the join uses the graded frames. The next clip’s first_frame still comes from the raw generated last frame, not the graded copy.</li>
+      <li><strong>RIFE</strong> (default off) interpolates the final joined video and raises FPS by the same multiplier (2× → 48 fps) so duration and audio stay aligned.</li>
+      <li><strong>True motion handoff</strong> (velocity across the cut) still needs <code>MiniMax_H3_Long_Workflow_Generator_V4.html</code> / <code>H3MultishotMemorySampler</code>. Invented nodes such as H3LatentHandoff or SeamSmoothOpticalFlow are not used here.</li>
+      <li><strong>Speed stack (recommended)</strong>: keep SageAttention + EasyCache (already in the workflow) → add a Turbo LoRA (v4 / EMA preferred) → set Steps to 6–8. Peak VRAM stays roughly equal to a single clip because generation is sequential.</li>
+      <li><strong>Start image</strong> (I2V mode) must closely match the first segment’s character, clothing, environment and framing for best results.</li>
+    </ul>
+    <div class="speed-note">
+      After downloading the workflow JSON, load it into ComfyUI. For maximum speed load a Turbo LoRA at strength ~1.0 and keep Steps at 6–8. Peak VRAM stays roughly equal to a single clip because generation is sequential.
+    </div>
+  </div>
+</div>
+
+<script>
+// ------------------------------------------------------------------
+// Helpers & persistence
+// ------------------------------------------------------------------
+const $ = id => document.getElementById(id);
+
+const SETTINGS_KEY = "h3long_generator_v3av1";
+const SETTINGS_KEY_LEGACY = "h3long_generator_v2";
+const SIZE_PRESETS = {
+  "480x864": [480, 864],
+  "544x960": [544, 960],
+  "608x1088": [608, 1088],
+  "768x1344": [768, 1344],
+  "864x480": [864, 480],
+  "960x544": [960, 544],
+  "1056x608": [1056, 608],
+  "1152x640": [1152, 640],
+  "1280x736": [1280, 736],
+  "1344x768": [1344, 768],
+  "512x512": [512, 512],
+  "768x768": [768, 768]
+};
+const GROK_MODELS = [
+  "grok-4.7",
+  "grok-4.6",
+  "grok-4.5",
+  "grok-4.3",
+  "grok-4.20-0309-reasoning",
+  "grok-4.20-0309-non-reasoning",
+  "grok-build-0.1",
+  "grok-4.20-multi-agent-0309",
+  "grok-4"
+];
+
+function loadSettings() {
+  const s = Object.assign(
+    JSON.parse(localStorage.getItem(SETTINGS_KEY_LEGACY) || "{}"),
+    JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}")
+  );
+  if (s.provider) $("provider").value = s.provider;
+  if (s.apiKey) $("apiKey").value = s.apiKey;
+  if (s.modelName) $("modelName").value = s.modelName;
+  if (s.grokModel) $("grokModel").value = s.grokModel;
+  if (s.ollamaUrl) $("ollamaUrl").value = s.ollamaUrl;
+  if (s.ollamaModel) $("ollamaModel").value = s.ollamaModel;
+  if (s.lmstudioUrl) $("lmstudioUrl").value = s.lmstudioUrl;
+  if (s.lmstudioModel) $("lmstudioModel").value = s.lmstudioModel;
+  if (s.customUrl) $("customUrl").value = s.customUrl;
+  if (s.customModel) $("customModel").value = s.customModel;
+  if (s.genMode) $("genMode").value = s.genMode;
+  if (s.steps) $("steps").value = s.steps;
+  if (s.segLen) $("segLen").value = s.segLen;
+  if (s.sizePreset) $("sizePreset").value = s.sizePreset;
+  if (s.width) $("width").value = s.width;
+  if (s.height) $("height").value = s.height;
+  if (s.comfyUrl) $("comfyUrl").value = s.comfyUrl;
+  if (s.unetName) $("unetName").value = s.unetName;
+  if (s.clipName) $("clipName").value = s.clipName;
+  if (s.videoVae) $("videoVae").value = s.videoVae;
+  if (s.audioVae) $("audioVae").value = s.audioVae;
+  if (s.lastFrameContinue) $("lastFrameContinue").value = s.lastFrameContinue;
+  if (s.overlapFrames != null) $("overlapFrames").value = s.overlapFrames;
+  if (s.fadeInterpolation) $("fadeInterpolation").value = s.fadeInterpolation;
+  if (s.colorMatch) $("colorMatch").value = s.colorMatch;
+  if (s.colorMatchMethod) $("colorMatchMethod").value = s.colorMatchMethod;
+  if (s.colorMatchStrength != null) $("colorMatchStrength").value = s.colorMatchStrength;
+  if (s.rifeMultiplier != null) $("rifeMultiplier").value = s.rifeMultiplier;
+  if ($("sizePreset").value !== "custom" && SIZE_PRESETS[$("sizePreset").value] && !s.width) {
+    applySizePreset($("sizePreset").value);
+  }
+  toggleProviderUI();
+  toggleModeUI();
+  updateClipCalc();
+  updatePlanButton();
+  updateSizeHint();
+  pinPromptBox();
+}
+function pinPromptBox() {
+  const ta = $("userPrompt");
+  if (ta.dataset.pinned) return;
+  const w = ta.getBoundingClientRect().width;
+  if (w > 0) {
+    ta.style.width = Math.round(w) + "px";
+    ta.dataset.pinned = "1";
+  }
+}
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+    provider: $("provider").value,
+    apiKey: $("apiKey").value,
+    modelName: $("modelName").value,
+    grokModel: $("grokModel").value,
+    ollamaUrl: $("ollamaUrl").value,
+    ollamaModel: $("ollamaModel").value,
+    lmstudioUrl: $("lmstudioUrl").value,
+    lmstudioModel: $("lmstudioModel").value,
+    customUrl: $("customUrl").value,
+    customModel: $("customModel").value,
+    genMode: $("genMode").value,
+    steps: $("steps").value,
+    segLen: $("segLen").value,
+    sizePreset: $("sizePreset").value,
+    width: $("width").value,
+    height: $("height").value,
+    comfyUrl: $("comfyUrl").value,
+    unetName: $("unetName").value,
+    clipName: $("clipName").value,
+    videoVae: $("videoVae").value,
+    audioVae: $("audioVae").value,
+    lastFrameContinue: $("lastFrameContinue").value,
+    overlapFrames: $("overlapFrames").value,
+    fadeInterpolation: $("fadeInterpolation").value,
+    colorMatch: $("colorMatch").value,
+    colorMatchMethod: $("colorMatchMethod").value,
+    colorMatchStrength: $("colorMatchStrength").value,
+    rifeMultiplier: $("rifeMultiplier").value
+  }));
+}
+
+$("provider").addEventListener("change", () => {
+  const p = $("provider").value;
+  if (p === "openai") $("modelName").value = "gpt-4o";
+  if (p === "anthropic") $("modelName").value = "claude-3-5-sonnet-20241022";
+  toggleProviderUI();
+  updatePlanButton();
+  saveSettings();
+});
+$("genMode").addEventListener("change", () => { toggleModeUI(); saveSettings(); });
+["lastFrameContinue","overlapFrames","fadeInterpolation","colorMatch","colorMatchMethod","colorMatchStrength","rifeMultiplier"].forEach(id => {
+  $(id).addEventListener("change", saveSettings);
+  $(id).addEventListener("input", saveSettings);
+});
+$("apiKey").addEventListener("change", saveSettings);
+$("modelName").addEventListener("change", saveSettings);
+$("grokModel").addEventListener("change", () => {
+  if ($("grokModel").value === "custom" && /^(gpt-4o|claude-3-5-sonnet-20241022)$/.test($("modelName").value)) {
+    $("modelName").value = "";
+  }
+  toggleProviderUI();
+  saveSettings();
+});
+$("ollamaUrl").addEventListener("change", saveSettings);
+$("ollamaModel").addEventListener("change", saveSettings);
+$("lmstudioUrl").addEventListener("change", saveSettings);
+$("lmstudioModel").addEventListener("change", saveSettings);
+$("lmstudioModelSelect").addEventListener("change", () => {
+  if ($("lmstudioModelSelect").value) $("lmstudioModel").value = $("lmstudioModelSelect").value;
+  saveSettings();
+});
+$("customUrl").addEventListener("change", saveSettings);
+$("customModel").addEventListener("change", saveSettings);
+$("customModelSelect").addEventListener("change", () => {
+  if ($("customModelSelect").value) $("customModel").value = $("customModelSelect").value;
+  saveSettings();
+});
+$("duration").addEventListener("input", updateClipCalc);
+$("segLen").addEventListener("input", () => { updateClipCalc(); saveSettings(); });
+$("steps").addEventListener("change", saveSettings);
+$("sizePreset").addEventListener("change", () => {
+  applySizePreset($("sizePreset").value);
+  saveSettings();
+});
+$("width").addEventListener("input", () => { syncPresetFromInputs(); saveSettings(); });
+$("height").addEventListener("input", () => { syncPresetFromInputs(); saveSettings(); });
+$("comfyUrl").addEventListener("change", saveSettings);
+["unet", "clip", "videoVae", "audioVae"].forEach(key => {
+  const selectId = key + "Select";
+  const inputId = key === "unet" || key === "clip" ? key + "Name" : key;
+  $(selectId).addEventListener("change", () => {
+    if ($(selectId).value) $(inputId).value = $(selectId).value;
+    saveSettings();
+  });
+  $(inputId).addEventListener("change", () => {
+    syncModelSelect(selectId, inputId);
+    saveSettings();
+  });
+});
+$("btnScanModels").addEventListener("click", () => scanComfyModels(false));
+$("btnPickModels").addEventListener("click", () => $("modelFolder").click());
+$("modelFolder").addEventListener("change", () => {
+  const files = [...$("modelFolder").files];
+  if (!files.length) return;
+  const groups = groupsFromRelativePaths(files.map(f => f.webkitRelativePath || f.name));
+  const n = applyModelLists(groups);
+  saveSettings();
+  showStatus(n ? `Read ${n} weight files from the selected folder.` : "That folder has no weight files in diffusion_models, unet, text_encoders, clip, or vae.", n ? "success" : "error");
+});
+$("advModels").addEventListener("toggle", () => {
+  if ($("advModels").open && !$("advModels").dataset.scanned) {
+    $("advModels").dataset.scanned = "1";
+    scanComfyModels(true);
+  }
+});
+
+const WEIGHT_EXT = /\.(safetensors|sft|gguf|pt|pth|ckpt|bin)$/i;
+const MODEL_FOLDERS = ["diffusion_models", "unet", "text_encoders", "clip", "vae"];
+
+// ComfyUI on Windows names subfolder models with a backslash (MiniMax-H3\file.safetensors).
+// The page shows them with "/", so convert back before writing the workflow.
+function comfyModelName(v) {
+  const s = String(v || "").trim();
+  if (!s.includes("/")) return s;
+  const win = window.__comfyUsesBackslash !== false && /win/i.test(navigator.platform || navigator.userAgent || "");
+  return (window.__comfyUsesBackslash || win) ? s.replace(/\//g, "\\") : s;
+}
+
+function normModelPath(name) {
+  return String(name || "").replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+function isWeightFile(name) {
+  const base = normModelPath(name).split("/").pop();
+  if (!base || /^put_.*_here$/i.test(base)) return false;
+  return WEIGHT_EXT.test(base);
+}
+
+function emptyModelGroups() {
+  return { diffusion_models: [], unet: [], text_encoders: [], clip: [], vae: [] };
+}
+
+function addModelFile(groups, folder, rel) {
+  const name = normModelPath(rel);
+  if (!groups[folder] || !isWeightFile(name)) return;
+  groups[folder].push(name);
+}
+
+function groupsFromRelativePaths(paths) {
+  const groups = emptyModelGroups();
+  paths.forEach(raw => {
+    const parts = normModelPath(raw).split("/").filter(Boolean);
+    const idx = parts.findIndex(p => MODEL_FOLDERS.includes(p));
+    if (idx < 0 || idx === parts.length - 1) return;
+    addModelFile(groups, parts[idx], parts.slice(idx + 1).join("/"));
+  });
+  return groups;
+}
+
+function preferSort(names, keys) {
+  const score = (n) => keys.reduce((s, k) => s + (n.toLowerCase().includes(k) ? 1 : 0), 0);
+  return [...new Set(names)].sort((a, b) => score(b) - score(a) || a.localeCompare(b));
+}
+
+function syncModelSelect(selectId, inputId) {
+  const current = $(inputId).value.trim();
+  const options = [...$(selectId).options].map(o => o.value).filter(Boolean);
+  const match = options.find(n => n === current)
+    || options.find(n => n.endsWith("/" + current))
+    || options.find(n => n.split("/").pop() === current);
+  $(selectId).value = match || "";
+}
+
+function setModelChoices(selectId, inputId, names) {
+  const current = $(inputId).value.trim();
+  const sel = $(selectId);
+  sel.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = names.length ? "Custom / type below" : "No files found";
+  sel.appendChild(blank);
+  names.forEach(n => {
+    const o = document.createElement("option");
+    o.value = n;
+    o.textContent = n;
+    sel.appendChild(o);
+  });
+  const match = names.find(n => n === current)
+    || names.find(n => n.endsWith("/" + current))
+    || names.find(n => n.split("/").pop() === current);
+  if (match) {
+    sel.value = match;
+    $(inputId).value = match;
+  }
+}
+
+function applyModelLists(groups) {
+  const unets = preferSort([].concat(groups.diffusion_models || [], groups.unet || []), ["fl2va", "minimax", "h3"]);
+  const clips = preferSort([].concat(groups.text_encoders || [], groups.clip || []), ["qwen3vl", "minimax", "h3"]);
+  const vaes = groups.vae || [];
+  setModelChoices("unetSelect", "unetName", unets);
+  setModelChoices("clipSelect", "clipName", clips);
+  setModelChoices("videoVaeSelect", "videoVae", preferSort(vaes, ["video", "minimax", "h3"]));
+  setModelChoices("audioVaeSelect", "audioVae", preferSort(vaes, ["audio", "minimax", "h3"]));
+  const n = unets.length + clips.length + vaes.length;
+  $("modelScanHint").textContent = `UNET ${unets.length} · CLIP ${clips.length} · VAE ${vaes.length}. The name written into the workflow includes a subfolder when the file is not in the folder root.`;
+  return n;
+}
+
+async function fetchModelFolder(base, folder) {
+  let res;
+  try {
+    res = await fetch(base.replace(/\/$/, "") + "/models/" + encodeURIComponent(folder));
+  } catch (e) {
+    throw new Error(corsHint(base, e));
+  }
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(folder + " HTTP " + res.status);
+  const data = await res.json();
+  if (!Array.isArray(data)) throw new Error(folder + " did not return a file list");
+  return data.map(normModelPath).filter(isWeightFile);
+}
+
+async function scanComfyModels(quiet) {
+  const base = ($("comfyUrl").value || "http://127.0.0.1:8188").trim().replace(/\/$/, "");
+  if (!quiet) showStatus("Scanning ComfyUI model folders…", "info");
+  try {
+    const groups = emptyModelGroups();
+    for (const folder of MODEL_FOLDERS) groups[folder] = await fetchModelFolder(base, folder);
+    const n = applyModelLists(groups);
+    saveSettings();
+    const msg = n
+      ? `Found ${n} weight files on ${base}.`
+      : `Reached ${base} but those folders have no weight files.`;
+    if (!quiet) showStatus(msg, n ? "success" : "error");
+  } catch (e) {
+    const msg = "ComfyUI model list failed: " + e.message + " Pick the models folder instead (D:\\ComfyUI\\ComfyUI\\models). ComfyUI only allows a browser page on disk to call it when started with --enable-cors-header.";
+    $("modelScanHint").textContent = msg;
+    if (!quiet) showStatus(msg, "error");
+  }
+}
+
+function applySizePreset(preset) {
+  const pair = SIZE_PRESETS[preset];
+  if (!pair) {
+    updateSizeHint();
+    return;
+  }
+  $("width").value = pair[0];
+  $("height").value = pair[1];
+  updateSizeHint();
+}
+
+function syncPresetFromInputs() {
+  const key = `${parseInt($("width").value, 10)}x${parseInt($("height").value, 10)}`;
+  $("sizePreset").value = SIZE_PRESETS[key] ? key : "custom";
+  updateSizeHint();
+}
+
+function updateSizeHint() {
+  const w = parseInt($("width").value, 10) || 0;
+  const h = parseInt($("height").value, 10) || 0;
+  const mp = (w * h / 1e6).toFixed(2);
+  const aligned = w > 0 && h > 0 && w % 32 === 0 && h % 32 === 0;
+  $("sizeHint").textContent = `${w}×${h} · ${mp} MP · ${aligned ? "multiple of 32" : "not a multiple of 32 — H3 prefers multiples of 32"}`;
+}
+
+function toggleProviderUI() {
+  const p = $("provider").value;
+  const needsKey = p === "xai" || p === "openai" || p === "anthropic" || p === "custom" || p === "lmstudio";
+  $("apiKeyGroup").style.display = needsKey ? "block" : "none";
+  $("ollamaGroup").style.display = p === "ollama" ? "block" : "none";
+  $("lmstudioGroup").style.display = p === "lmstudio" ? "block" : "none";
+  $("customGroup").style.display = p === "custom" ? "block" : "none";
+  $("grokModelGroup").style.display = p === "xai" ? "block" : "none";
+
+  if (p === "lmstudio") {
+    $("apiKeyLabel").textContent = "API key (optional for LM Studio)";
+    $("apiKeyHint").textContent = "LM Studio usually accepts a blank key. Stored only in this browser.";
+  } else if (p === "custom") {
+    $("apiKeyLabel").textContent = "API key (optional)";
+    $("apiKeyHint").textContent = "Sent as a Bearer token when filled. Stored only in this browser.";
+  } else {
+    $("apiKeyLabel").textContent = "API Key (stored only in this browser)";
+    $("apiKeyHint").textContent = "Keys stay in localStorage. A page opened from disk can be blocked by browser CORS.";
+  }
+
+  const customGrok = p === "xai" && $("grokModel").value === "custom";
+  const showCloudModel = p === "openai" || p === "anthropic" || customGrok;
+  $("cloudModelGroup").style.display = showCloudModel ? "block" : "none";
+  if (customGrok) $("cloudModelLabel").textContent = "Custom Grok model id";
+  else if (p === "openai") $("cloudModelLabel").textContent = "OpenAI model";
+  else if (p === "anthropic") $("cloudModelLabel").textContent = "Anthropic model";
+}
+
+function toggleModeUI() {
+  const mode = $("genMode").value;
+  $("startImageGroup").style.display = mode === "i2v" ? "block" : "none";
+  $("modeBadge").textContent = mode === "t2v" ? "T2V" : "I2V";
+}
+
+function updateClipCalc() {
+  const total = parseFloat($("duration").value) || 60;
+  const clip = parseFloat($("segLen").value) || 4;
+  const n = Math.max(1, Math.ceil(total / clip));
+  const approx = (total / n).toFixed(1);
+  $("clipCalc").textContent = `≈ ${n} clips × ~${approx}s`;
+}
+
+function updatePlanButton() {
+  const p = $("provider").value;
+  $("btnPlan").textContent = p === "none"
+    ? "Generate Segments (local)"
+    : "Plan with LLM";
+}
+
+// ------------------------------------------------------------------
+// Planner system prompt (strong continuity + respects target_segment_seconds)
+// ------------------------------------------------------------------
+const PLANNER_SYSTEM = `You are an expert MiniMax H3 video director and prompt engineer. Turn a user's rough idea into a shot-by-shot plan for continuous long-form video, split into sequential clips that are chained by using the last frame of each clip as the first frame of the next. Every clip prompt MUST follow MiniMax's official Video Prompt Writing Guide (T2VA / I2VA / FL2VA / L2VA).
+
+SEGMENTING
+1. Number of clips = ceil(total_seconds / target_segment_seconds). Each clip is close to target_segment_seconds; the last may differ slightly.
+2. Keep identity, wardrobe, environment, lighting and camera language consistent across all clips; each clip only describes its own time window and advances the action naturally so chained motion and audio continue.
+
+TASK TYPE PER CLIP (task_mode is given in the user message)
+- Clip 1 with task_mode t2v = T2VA: no image-alignment line. Start directly with the three core fields.
+- Clip 1 with task_mode i2v, and EVERY clip after clip 1 (they receive the previous clip's last frame as their first frame) = I2VA. The first line MUST be exactly:
+For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+  then one blank line, then the three core fields. <Picture 1> means the supplied first-frame image.
+- (Only if the user explicitly supplies first AND last frames = FL2VA, first line: How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot N) aligns with the S.SS-second mark of the target video.  Only a last frame = L2VA: How the reference pictures align with the target video — <Picture 1> (from [Shot N]) aligns with the S.SS-second mark of the target video.  S.SS = clip duration with exactly two decimals, N = last shot index.)
+
+THREE CORE FIELDS (always, in this order, each on its own line)
+integrated_multimodal_description: [Shot 1] ...
+overall_soundscape: ...
+non_diegetic_music: ...
+
+SHOT RULES (inside integrated_multimodal_description)
+- [Shot 1] has NO timestamp. Later shots: [Shot N] At MM:SS.mmm, ... with strictly increasing cut times inside the clip duration (e.g. [Shot 2] At 00:03.500, ...). Prefer a single shot per clip unless a cut is clearly wanted, so chaining stays seamless.
+- Start [Shot 1] with the overall style and initial composition (e.g. "Live-action, cinematic, a medium-wide shot frames ...").
+- Write camera motion as natural English inside the shot, not stacked labels. Vocabulary: Zoom In/Out, Push In/Pull Out, Pan Left/Right, Truck Left/Right, Tilt Up/Down, Pedestal Up/Down, Arc Shot, Tracking Shot, Static Shot, Shake Slightly/Strongly, POV, Roll Clockwise/Counterclockwise. Amplitude: "with small amplitude" / "with large amplitude". Speed: "at slow speed" / "at fast speed". Omit medium/normal.
+- Every character who speaks or sings gets a stable ID (S1), (S2) kept across all clips; use (S1,S2) for group speech. Dialogue and lyrics: <d>[English] exact words</d> (use the real language). Voiceover: "says in an off-screen voiceover" and state that the lips remain closed. Speech crossing a cut: <scenetrans> plus continuity phrasing. Speech cut off by the end of the clip: <cutoff>.
+- Visible on-screen text goes in English double quotes, verbatim.
+- overall_soundscape: 1-4 English sentences of ambience and physical sounds (footsteps, wind, cloth, impacts). Do not repeat dialogue. N/A only if silence is requested.
+- non_diegetic_music: 1-3 sentences on instrumentation, tempo and dynamics, or N/A. No abstract mood-only words.
+
+OUTPUT: ONLY valid JSON in this exact schema (no markdown, no commentary). Put the full clip text, including newlines (as \\n), in "prompt":
+
+{
+  "enhanced_overall": "one-paragraph cleaned high-level description",
+  "total_seconds": 60,
+  "segments": [
+    { "index": 1, "approx_seconds": 4, "prompt": "integrated_multimodal_description: [Shot 1] ...\\noverall_soundscape: ...\\nnon_diegetic_music: ..." }
+  ]
+}`;
+// ------------------------------------------------------------------
+// Local (no-API) segment generator – strong seamless continuity
+// ------------------------------------------------------------------
+const I2VA_LINE = "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.";
+function fl2vaLine(dur, n) { return `How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot ${n}) aligns with the ${Number(dur).toFixed(2)}-second mark of the target video.`; }
+function l2vaLine(dur, n) { return `How the reference pictures align with the target video — <Picture 1> (from [Shot ${n}]) aligns with the ${Number(dur).toFixed(2)}-second mark of the target video.`; }
+
+// Local (no-API) generator: MiniMax Video Prompt Writing Guide format (T2VA / I2VA)
+function generateLocalSegments(rawPrompt, totalSeconds, targetSegSeconds, mode) {
+  mode = mode || ($("genMode") ? $("genMode").value : "t2v");
+  const n = Math.max(1, Math.ceil(totalSeconds / targetSegSeconds));
+  const approx = totalSeconds / n;
+  const idea = String(rawPrompt).trim().replace(/[.\s]+$/, "");
+  const segments = [];
+  for (let i = 0; i < n; i++) {
+    let shot;
+    if (i === 0) {
+      shot = `[Shot 1] Live-action, cinematic, a medium-wide shot frames ${idea}. The scene is established with clear lighting and a consistent look; the camera pushes in at slow speed with small amplitude as the action begins.`;
+    } else if (i === n - 1) {
+      shot = `[Shot 1] Live-action, cinematic, the shot continues from the same framing, subject, wardrobe and lighting as Picture 1. ${idea}; the action comes to a natural resolution while the camera pulls out at slow speed with small amplitude.`;
+    } else {
+      shot = `[Shot 1] Live-action, cinematic, the shot continues from the same framing, subject, wardrobe and lighting as Picture 1. ${idea}; the action keeps moving forward in the same direction and energy as before, and the camera tracks the subject at slow speed.`;
+    }
+    const core =
+`integrated_multimodal_description: ${shot}
+overall_soundscape: The natural ambience of the location continues steadily, with physical sounds that match each visible movement, such as footsteps, cloth rustle and air movement.
+non_diegetic_music: N/A`;
+    const needsImage = i > 0 || mode === "i2v";
+    segments.push({
+      index: i + 1,
+      approx_seconds: Math.round(approx * 10) / 10,
+      prompt: (needsImage ? I2VA_LINE + "\n\n" : "") + core
+    });
+  }
+  return { enhanced_overall: rawPrompt, total_seconds: totalSeconds, target_clip_seconds: targetSegSeconds, prompt_format: "MiniMax Video Prompt Writing Guide (T2VA clip 1 / I2VA chained clips)", segments };
+}
+// ------------------------------------------------------------------
+// LLM callers (unchanged logic)
+// ------------------------------------------------------------------
+function corsHint(base, err) {
+  return `Could not reach ${base}. If this page was opened from disk, the browser may block the call (CORS). ${err && err.message ? err.message : ""}`.trim();
+}
+
+function selectedGrokModel() {
+  return $("grokModel").value === "custom" ? $("modelName").value.trim() : $("grokModel").value;
+}
+
+function openAIBase(raw) {
+  let root = String(raw || "").trim();
+  if (!root) throw new Error("Enter a base URL");
+  root = root.replace(/\/+$/, "");
+  root = root.replace(/\/(chat\/completions|completions|embeddings|responses|models)$/i, "");
+  root = root.replace(/\/+$/, "");
+  root = root.replace(/(\/v1)+$/i, "/v1");
+  if (!/\/v1$/i.test(root)) root += "/v1";
+  return root;
+}
+
+function apiErrorMessage(data) {
+  if (!data || data.error == null) return "";
+  if (typeof data.error === "string") return data.error;
+  return data.error.message || JSON.stringify(data.error);
+}
+
+async function readApiJson(res, label) {
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+  const errMsg = apiErrorMessage(data);
+  if (!res.ok) throw new Error(`${label} ${res.status}: ${(errMsg || text).slice(0, 300)}`);
+  if (errMsg) throw new Error(`${label}: ${errMsg}`);
+  return data || {};
+}
+
+async function callOpenAICompat(base, model, apiKey, userMsg, label) {
+  const root = openAIBase(base);
+  if (!model) throw new Error("Enter a model id");
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  let res;
+  try {
+    res = await fetch(root + "/chat/completions", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: PLANNER_SYSTEM },
+          { role: "user", content: userMsg }
+        ],
+        temperature: 0.4
+      })
+    });
+  } catch (e) {
+    throw new Error(corsHint(root, e));
+  }
+  const data = await readApiJson(res, label);
+  const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (!content) throw new Error(`${label} returned no message content`);
+  return content;
+}
+
+async function listOpenAIModels(base, apiKey) {
+  const root = openAIBase(base);
+  const headers = {};
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  let res;
+  try {
+    res = await fetch(root + "/models", { headers });
+  } catch (e) {
+    throw new Error(corsHint(root, e));
+  }
+  const data = await readApiJson(res, root + "/models");
+  const ids = (data.data || []).map(m => m && m.id).filter(Boolean);
+  if (!ids.length) throw new Error(`Reached ${root}/models but the model list was empty. Load a model on that server, or type its id.`);
+  return ids;
+}
+
+function fillModelSelect(selectEl, ids, current) {
+  const keep = current || "";
+  selectEl.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "Custom / type below";
+  selectEl.appendChild(blank);
+  ids.forEach(id => {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = id;
+    selectEl.appendChild(o);
+  });
+  if (keep && ids.includes(keep)) selectEl.value = keep;
+}
+
+function setGrokOptions(ids) {
+  const current = $("grokModel").value;
+  const sel = $("grokModel");
+  sel.innerHTML = "";
+  ids.forEach(id => {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = id;
+    sel.appendChild(o);
+  });
+  const custom = document.createElement("option");
+  custom.value = "custom";
+  custom.textContent = "Custom model id";
+  sel.appendChild(custom);
+  if (current === "custom" || ids.includes(current)) sel.value = current;
+  else sel.value = ids[0] || "custom";
+}
+
+function isGrokChatModel(id) {
+  return /^grok-(4|build)/.test(id) && !/imagine|voice|image|video/i.test(id);
+}
+
+async function callLLM(userPrompt, duration) {
+  const provider = $("provider").value;
+  const targetSeg = parseFloat($("segLen").value) || 4;
+
+  const userMsg = `raw_user_prompt: ${userPrompt}
+total_duration_seconds: ${duration}
+target_segment_seconds: ${targetSeg}
+task_mode: ${$("genMode").value} (clip 1 is ${$("genMode").value === "t2v" ? "T2VA" : "I2VA"}; all later clips are I2VA)`;
+
+  if (provider === "none") throw new Error("No provider selected");
+
+  if (provider === "ollama") {
+    const root = $("ollamaUrl").value.replace(/\/$/, "");
+    let res;
+    try {
+      res = await fetch(root + "/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: $("ollamaModel").value,
+          messages: [
+            { role: "system", content: PLANNER_SYSTEM },
+            { role: "user", content: userMsg }
+          ],
+          stream: false,
+          options: { temperature: 0.4 }
+        })
+      });
+    } catch (e) {
+      throw new Error(corsHint(root, e));
+    }
+    if (!res.ok) throw new Error(`Ollama error ${res.status}`);
+    const data = await res.json();
+    return data.message?.content || "";
+  }
+
+  if (provider === "xai") {
+    const key = $("apiKey").value.trim();
+    if (!key) throw new Error("API key required");
+    return callOpenAICompat("https://api.x.ai/v1", selectedGrokModel(), key, userMsg, "xai");
+  }
+
+  if (provider === "openai") {
+    const key = $("apiKey").value.trim();
+    if (!key) throw new Error("API key required");
+    return callOpenAICompat("https://api.openai.com/v1", $("modelName").value.trim(), key, userMsg, "openai");
+  }
+
+  if (provider === "lmstudio") {
+    const model = $("lmstudioModel").value.trim() || $("lmstudioModelSelect").value;
+    return callOpenAICompat($("lmstudioUrl").value, model, $("apiKey").value.trim(), userMsg, "LM Studio");
+  }
+
+  if (provider === "custom") {
+    return callOpenAICompat($("customUrl").value, $("customModel").value.trim(), $("apiKey").value.trim(), userMsg, "custom");
+  }
+
+  if (provider === "anthropic") {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": $("apiKey").value,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: $("modelName").value.trim(),
+        max_tokens: 4096,
+        system: PLANNER_SYSTEM,
+        messages: [{ role: "user", content: userMsg }]
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Anthropic ${res.status}: ${err.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    return data.content[0].text;
+  }
+}
+
+// ------------------------------------------------------------------
+// H3 helpers + Workflow builder (T2V / I2V aware) – V3aV1 standard seam smoothing
+// ------------------------------------------------------------------
+function h3ValidLength(seconds, fps = 24) {
+  const raw = Math.max(5, Math.round(seconds * fps));
+  const k = Math.ceil((raw - 5) / 17);
+  return 17 * k + 5;
+}
+
+class WorkflowBuilder {
+  constructor() {
+    this.nodes = [];
+    this.links = [];
+    this.nextId = 1;
+    this.nextLink = 1;
+  }
+
+  addNode(type, title, pos, opts = {}) {
+    const nid = this.nextId++;
+    const node = {
+      id: nid,
+      type,
+      pos,
+      size: opts.size || [300, 120],
+      flags: {},
+      order: 0,
+      mode: 0,
+      inputs: opts.inputs || [],
+      outputs: opts.outputs || [],
+      title,
+      properties: opts.properties || {
+        cnr_id: "comfy-core",
+        ver: "0.33.0",
+        "Node name for S&R": type
+      }
+    };
+    if (opts.widgets_values) node.widgets_values = opts.widgets_values;
+    if (opts.widgets_values_named) node.widgets_values_named = opts.widgets_values_named;
+    this.nodes.push(node);
+    return nid;
+  }
+
+  link(fromNode, fromSlot, toNode, toSlot, type = "*") {
+    const lid = this.nextLink++;
+    this.links.push([lid, fromNode, fromSlot, toNode, toSlot, type]);
+
+    const src = this.nodes.find(n => n.id === fromNode);
+    if (src && fromSlot < src.outputs.length) {
+      if (!src.outputs[fromSlot].links) src.outputs[fromSlot].links = [];
+      src.outputs[fromSlot].links.push(lid);
+    }
+    const dst = this.nodes.find(n => n.id === toNode);
+    if (dst && toSlot < dst.inputs.length) {
+      dst.inputs[toSlot].link = lid;
+    }
+    return lid;
+  }
+}
+
+const KJ_PROPS = (type, ver) => ({ cnr_id: "comfyui-kjnodes", ver: ver || "1.1.0", "Node name for S&R": type });
+const H3MS_PROPS = (type) => ({ cnr_id: "comfyui-h3-multishot", ver: "2.6.5", "Node name for S&R": type });
+const RIFE_PROPS = { cnr_id: "comfyui-frame-interpolation", ver: "1.0.11", "Node name for S&R": "RIFE VFI" };
+
+function buildWorkflow(segments, config) {
+  const b = new WorkflowBuilder();
+  const N = segments.length;
+  const W = config.width, H = config.height, STEPS = config.steps, FPS = 24;
+  const isT2V = config.mode === "t2v";
+  const fallbackSegLen = config.targetSegmentSeconds || 4;
+
+  const lastFrameContinue = config.lastFrameContinue !== false;
+  const overlapFrames = Math.max(0, Math.min(48, Math.floor(Number(config.overlapFrames) || 0)));
+  const useCrossfade = overlapFrames > 0;
+  const trimDupFrame = lastFrameContinue && !useCrossfade;
+  const colorMatchOn = !!config.colorMatch;
+  const colorMatchMethod = config.colorMatchMethod || "mkl";
+  const colorMatchStrength = (config.colorMatchStrength != null) ? Number(config.colorMatchStrength) : 1.0;
+  const fadeInterpolation = config.fadeInterpolation || "ease_in_out";
+  const rifeMultiplier = Math.max(0, Math.floor(Number(config.rifeMultiplier) || 0));
+
+  // Shared loaders
+  const unetId = b.addNode("UNETLoader", "UNET", [-2200, 100], {
+    widgets_values: [config.unetName, "default"],
+    widgets_values_named: { unet_name: config.unetName, weight_dtype: "default" },
+    outputs: [{ name: "MODEL", type: "MODEL", links: [] }]
+  });
+  const clipId = b.addNode("CLIPLoader", "CLIP", [-2200, 300], {
+    size: [420, 120],
+    widgets_values: [config.clipName, "minimax", "default"],
+    widgets_values_named: { clip_name: config.clipName, type: "minimax", device: "default" },
+    outputs: [{ name: "CLIP", type: "CLIP", links: [] }]
+  });
+  const videoVaeId = b.addNode("VAELoader", "Video VAE", [-2200, 500], {
+    widgets_values: [config.videoVae],
+    widgets_values_named: { vae_name: config.videoVae },
+    outputs: [{ name: "VAE", type: "VAE", links: [] }]
+  });
+  const audioVaeId = b.addNode("VAELoader", "Audio VAE", [-2200, 700], {
+    widgets_values: [config.audioVae],
+    widgets_values_named: { vae_name: config.audioVae },
+    outputs: [{ name: "VAE", type: "VAE", links: [] }]
+  });
+
+  const easyId = b.addNode("EasyCache", "EasyCache", [-1700, -100], {
+    size: [320, 140],
+    widgets_values: [0.3, 0.2, 0.9, false],
+    widgets_values_named: { reuse_threshold: 0.3, start_percent: 0.2, end_percent: 0.9, verbose: false },
+    inputs: [{ name: "model", type: "MODEL", link: null }],
+    outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
+    properties: { cnr_id: "comfy-core", ver: "0.30.0", "Node name for S&R": "EasyCache" }
+  });
+  b.link(unetId, 0, easyId, 0, "MODEL");
+
+  const sageId = b.addNode("PathchSageAttentionKJ", "Sage Attention", [-1300, -80], {
+    size: [280, 90],
+    widgets_values: ["auto", false],
+    widgets_values_named: { sage_attention: "auto", allow_compile: false },
+    inputs: [{ name: "model", type: "MODEL", link: null }],
+    outputs: [{ name: "MODEL", type: "MODEL", links: [] }],
+    properties: KJ_PROPS("PathchSageAttentionKJ")
+  });
+  b.link(easyId, 0, sageId, 0, "MODEL");
+
+  // Only create LoadImage when in I2V mode
+  let startImgId = null;
+  if (!isT2V) {
+    startImgId = b.addNode("LoadImage", "Start Image", [-2200, -350], {
+      size: [300, 320],
+      widgets_values: [config.startImage, "image"],
+      widgets_values_named: { image: config.startImage, upload: "image" },
+      outputs: [
+        { name: "IMAGE", type: "IMAGE", links: [] },
+        { name: "MASK", type: "MASK", links: [] }
+      ]
+    });
+  }
+
+  const samplerSelectId = b.addNode("KSamplerSelect", "Sampler", [-1700, 100], {
+    widgets_values: ["euler"],
+    widgets_values_named: { sampler_name: "euler" },
+    outputs: [{ name: "SAMPLER", type: "SAMPLER", links: [] }]
+  });
+
+  const stepsId = b.addNode("PrimitiveInt", "Steps", [-1700, -250], {
+    widgets_values: [STEPS, "fixed"],
+    widgets_values_named: { value: STEPS, fixed: "fixed" },
+    outputs: [{ name: "INT", type: "INT", links: [] }],
+    properties: { cnr_id: "comfy-core", ver: "0.33.0", "Node name for S&R": "PrimitiveInt" }
+  });
+
+  const lastFrameIds = [];
+  const segmentImageBatchIds = [];
+  const segmentAudioIds = [];
+  const colWidth = 750;
+  const baseX = -800;
+
+  for (let i = 0; i < N; i++) {
+    const x = baseX + i * colWidth;
+    const idx = i + 1;
+    const seg = segments[i];
+    const prompt = seg.prompt;
+    // Respect planner value, fall back to UI target segment length
+    const approxS = seg.approx_seconds || fallbackSegLen;
+    const length = h3ValidLength(approxS, FPS);
+    const seed = (config.baseSeed || 144012845932748); // same seed for every clip
+
+    const noiseId = b.addNode("RandomNoise", `Noise ${idx}`, [x, 200], {
+      widgets_values: [seed, "fixed"],
+      widgets_values_named: { noise_seed: seed, control_after_generate: "fixed" },
+      outputs: [{ name: "NOISE", type: "NOISE", links: [] }]
+    });
+
+    // Conditioning node
+    const condId = b.addNode("MiniMaxH3ImageToVideo", `Segment ${idx} Conditioning`, [x, -280], {
+      size: [400, 420],
+      widgets_values: [prompt, W, H, length],
+      widgets_values_named: { prompt, width: W, height: H, length },
+      inputs: [
+        { name: "clip", type: "CLIP", link: null },
+        { name: "vae", type: "VAE", link: null },
+        { name: "first_frame", shape: 7, type: "IMAGE", link: null },
+        { name: "last_frame", shape: 7, type: "IMAGE", link: null },
+        { name: "width", type: "INT", widget: { name: "width" }, link: null },
+        { name: "height", type: "INT", widget: { name: "height" }, link: null },
+        { name: "length", type: "INT", widget: { name: "length" }, link: null }
+      ],
+      outputs: [
+        { name: "positive", type: "CONDITIONING", links: [] },
+        { name: "LATENT", type: "LATENT", links: [] }
+      ]
+    });
+    b.link(clipId, 0, condId, 0, "CLIP");
+    b.link(videoVaeId, 0, condId, 1, "VAE");
+
+    // Link first_frame only when appropriate. Never wire a segment back into itself.
+    if (i === 0) {
+      if (!isT2V && startImgId !== null) {
+        b.link(startImgId, 0, condId, 2, "IMAGE");   // I2V first segment
+      }
+      // T2V first segment: leave first_frame unconnected → pure text-to-video
+    } else if (lastFrameContinue) {
+      b.link(lastFrameIds[i - 1], 0, condId, 2, "IMAGE");
+    }
+
+    const guiderId = b.addNode("BasicGuider", `Guider ${idx}`, [x, 350], {
+      inputs: [
+        { name: "model", type: "MODEL", link: null },
+        { name: "conditioning", type: "CONDITIONING", link: null }
+      ],
+      outputs: [{ name: "GUIDER", type: "GUIDER", links: [] }]
+    });
+    b.link(sageId, 0, guiderId, 0, "MODEL");
+    b.link(condId, 0, guiderId, 1, "CONDITIONING");
+
+    const schedId = b.addNode("BasicScheduler", `Scheduler ${idx}`, [x, 500], {
+      widgets_values: ["simple", STEPS, 1.0],
+      widgets_values_named: { scheduler: "simple", steps: STEPS, denoise: 1.0 },
+      inputs: [
+        { name: "model", type: "MODEL", link: null },
+        { name: "steps", type: "INT", widget: { name: "steps" }, link: null }
+      ],
+      outputs: [{ name: "SIGMAS", type: "SIGMAS", links: [] }]
+    });
+    b.link(sageId, 0, schedId, 0, "MODEL");
+    b.link(stepsId, 0, schedId, 1, "INT");
+
+    const samplerId = b.addNode("SamplerCustomAdvanced", `Sampler ${idx}`, [x, 650], {
+      inputs: [
+        { name: "noise", type: "NOISE", link: null },
+        { name: "guider", type: "GUIDER", link: null },
+        { name: "sampler", type: "SAMPLER", link: null },
+        { name: "sigmas", type: "SIGMAS", link: null },
+        { name: "latent_image", type: "LATENT", link: null }
+      ],
+      outputs: [
+        { name: "output", type: "LATENT", links: [] },
+        { name: "denoised_output", type: "LATENT", links: [] }
+      ]
+    });
+    b.link(noiseId, 0, samplerId, 0, "NOISE");
+    b.link(guiderId, 0, samplerId, 1, "GUIDER");
+    b.link(samplerSelectId, 0, samplerId, 2, "SAMPLER");
+    b.link(schedId, 0, samplerId, 3, "SIGMAS");
+    b.link(condId, 1, samplerId, 4, "LATENT");
+
+    const vdecId = b.addNode("VAEDecode", `Video Decode ${idx}`, [x, 850], {
+      inputs: [
+        { name: "samples", type: "LATENT", link: null },
+        { name: "vae", type: "VAE", link: null }
+      ],
+      outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+    });
+    b.link(samplerId, 0, vdecId, 0, "LATENT");
+    b.link(videoVaeId, 0, vdecId, 1, "VAE");
+
+    const adecId = b.addNode("VAEDecodeAudio", `Audio Decode ${idx}`, [x, 1000], {
+      inputs: [
+        { name: "samples", type: "LATENT", link: null },
+        { name: "vae", type: "VAE", link: null }
+      ],
+      outputs: [{ name: "AUDIO", type: "AUDIO", links: [] }]
+    });
+    b.link(samplerId, 0, adecId, 0, "LATENT");
+    b.link(audioVaeId, 0, adecId, 1, "VAE");
+
+    const createId = b.addNode("CreateVideo", `Create Video ${idx}`, [x, 1150], {
+      widgets_values: [FPS, 8],
+      widgets_values_named: { fps: FPS, bit_depth: 8 },
+      inputs: [
+        { name: "images", type: "IMAGE", link: null },
+        { name: "audio", shape: 7, type: "AUDIO", link: null }
+      ],
+      outputs: [{ name: "VIDEO", type: "VIDEO", links: [] }]
+    });
+    b.link(vdecId, 0, createId, 0, "IMAGE");
+    b.link(adecId, 0, createId, 1, "AUDIO");
+
+    const compId = b.addNode("GetVideoComponents", `Segment ${idx} Components`, [x, 1300], {
+      inputs: [{ name: "video", type: "VIDEO", link: null }],
+      outputs: [
+        { name: "images", type: "IMAGE", links: [] },
+        { name: "audio", type: "AUDIO", links: [] },
+        { name: "fps", type: "FLOAT", links: [] },
+        { name: "bit_depth", type: "INT", links: [] }
+      ]
+    });
+    b.link(createId, 0, compId, 0, "VIDEO");
+
+    // Raw last frame (used as the NEXT segment's first_frame, and as ColorMatch reference)
+    const lastId = b.addNode("ImageFromBatch", `Segment ${idx} Last Frame`, [x, 1450], {
+      widgets_values: [-1, 1],
+      widgets_values_named: { batch_index: -1, length: 1 },
+      inputs: [{ name: "image", type: "IMAGE", link: null }],
+      outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+    });
+    b.link(compId, 0, lastId, 0, "IMAGE");
+    lastFrameIds.push(lastId);
+
+    // Optional color match of this clip toward the previous clip's last frame (join path only)
+    let joinImagesId = compId;
+    if (colorMatchOn && i > 0) {
+      const cmId = b.addNode("ColorMatch", `Color Match ${idx}`, [x, 1520], {
+        size: [320, 160],
+        widgets_values: [colorMatchMethod, colorMatchStrength, true],
+        widgets_values_named: { method: colorMatchMethod, strength: colorMatchStrength, multithread: true },
+        inputs: [
+          { name: "image_ref", type: "IMAGE", link: null },
+          { name: "image_target", type: "IMAGE", link: null },
+          { name: "method", type: "COMBO", widget: { name: "method" }, link: null },
+          { name: "strength", type: "FLOAT", widget: { name: "strength" }, link: null },
+          { name: "multithread", type: "BOOLEAN", widget: { name: "multithread" }, link: null }
+        ],
+        outputs: [{ name: "image", type: "IMAGE", links: [] }],
+        properties: KJ_PROPS("ColorMatch")
+      });
+      b.link(lastFrameIds[i - 1], 0, cmId, 0, "IMAGE");
+      b.link(compId, 0, cmId, 1, "IMAGE");
+      joinImagesId = cmId;
+    }
+
+    if (i === 0 || !trimDupFrame) {
+      segmentImageBatchIds.push(joinImagesId);
+    } else {
+      // V3 fallback: drop the duplicated first frame (it is the previous last frame)
+      const trimId = b.addNode("ImageFromBatch", `Trim Seg ${idx}`, [x, 1600], {
+        size: [380, 90],
+        widgets_values: [1, length - 1],
+        widgets_values_named: { batch_index: 1, length: length - 1 },
+        inputs: [
+          { name: "image", type: "IMAGE", link: null },
+          { name: "length", type: "INT", widget: { name: "length" }, link: null }
+        ],
+        outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+      });
+      b.link(joinImagesId, 0, trimId, 0, "IMAGE");
+      segmentImageBatchIds.push(trimId);
+    }
+    segmentAudioIds.push(compId);
+
+    const saveSegId = b.addNode("SaveVideo", `Save Segment ${idx}`, [x, 1750], {
+      size: [400, 200],
+      widgets_values: [`video/MiniMax_H3_Long_seg${String(idx).padStart(2, "0")}`, "auto", "auto"],
+      widgets_values_named: {
+        filename_prefix: `video/MiniMax_H3_Long_seg${String(idx).padStart(2, "0")}`,
+        format: "auto", codec: "auto"
+      },
+      inputs: [{ name: "video", type: "VIDEO", link: null }],
+      outputs: [
+        { name: "video_url", type: "VIDEO", links: null },
+        { name: "video", type: "VIDEO", links: null }
+      ],
+      properties: { cnr_id: "comfy-core", ver: "0.30.1", "Node name for S&R": "SaveVideo" }
+    });
+    b.link(createId, 0, saveSegId, 0, "VIDEO");
+  }
+
+  // Final image join
+  const joinX = baseX + N * colWidth + 100;
+  let prevBatch = null;
+  for (let i = 0; i < N; i++) {
+    if (i === 0) { prevBatch = segmentImageBatchIds[0]; continue; }
+    if (useCrossfade) {
+      const joinId = b.addNode("ImageBatchJoinWithTransition", `Crossfade Join 1..${i+1}`, [joinX, 400 + (i-1)*120], {
+        size: [400, 260],
+        widgets_values: [-overlapFrames, fadeInterpolation, "fade", overlapFrames, 0.0, false, "CPU"],
+        widgets_values_named: {
+          start_index: -overlapFrames,
+          interpolation: fadeInterpolation,
+          transition_type: "fade",
+          transitioning_frames: overlapFrames,
+          blur_radius: 0.0,
+          reverse: false,
+          device: "CPU"
+        },
+        inputs: [
+          { name: "images_1", type: "IMAGE", link: null },
+          { name: "images_2", type: "IMAGE", link: null },
+          { name: "start_index", type: "INT", widget: { name: "start_index" }, link: null },
+          { name: "interpolation", type: "COMBO", widget: { name: "interpolation" }, link: null },
+          { name: "transition_type", type: "COMBO", widget: { name: "transition_type" }, link: null },
+          { name: "transitioning_frames", type: "INT", widget: { name: "transitioning_frames" }, link: null },
+          { name: "blur_radius", type: "FLOAT", widget: { name: "blur_radius" }, link: null },
+          { name: "reverse", type: "BOOLEAN", widget: { name: "reverse" }, link: null },
+          { name: "device", type: "COMBO", widget: { name: "device" }, link: null }
+        ],
+        outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }],
+        properties: KJ_PROPS("ImageBatchJoinWithTransition")
+      });
+      if (i === 1) b.link(segmentImageBatchIds[0], 0, joinId, 0, "IMAGE");
+      else b.link(prevBatch, 0, joinId, 0, "IMAGE");
+      b.link(segmentImageBatchIds[i], 0, joinId, 1, "IMAGE");
+      prevBatch = joinId;
+    } else {
+      const batchId = b.addNode("ImageBatch", `Join Video 1..${i+1}`, [joinX, 400 + (i-1)*80], {
+        inputs: [
+          { name: "image1", type: "IMAGE", link: null },
+          { name: "image2", type: "IMAGE", link: null }
+        ],
+        outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }]
+      });
+      if (i === 1) b.link(segmentImageBatchIds[0], 0, batchId, 0, "IMAGE");
+      else b.link(prevBatch, 0, batchId, 0, "IMAGE");
+      b.link(segmentImageBatchIds[i], 0, batchId, 1, "IMAGE");
+      prevBatch = batchId;
+    }
+  }
+  let finalImages = N > 1 ? prevBatch : segmentImageBatchIds[0];
+
+  let prevAudio = null;
+  for (let i = 0; i < N; i++) {
+    if (i === 0) { prevAudio = segmentAudioIds[0]; continue; }
+    const concatId = b.addNode("AudioConcat", `Join Audio 1..${i+1}`, [joinX, 900 + (i-1)*80], {
+      widgets_values: ["after"],
+      widgets_values_named: { direction: "after" },
+      inputs: [
+        { name: "audio1", type: "AUDIO", link: null },
+        { name: "audio2", type: "AUDIO", link: null }
+      ],
+      outputs: [{ name: "AUDIO", type: "AUDIO", links: [] }]
+    });
+    if (i === 1) b.link(segmentAudioIds[0], 1, concatId, 0, "AUDIO");
+    else b.link(prevAudio, 0, concatId, 0, "AUDIO");
+
+    // Keep picture and soundtrack the same length:
+    //   overlap fade  -> trim overlap_frames / 24 seconds from the later clip
+    //   V3 last-frame -> trim the duplicated first frame (1/24 s)
+    //   no smoothing  -> no trim, full concat
+    const trimFrames = useCrossfade ? overlapFrames : (trimDupFrame ? 1 : 0);
+    const trimSeconds = trimFrames > 0 ? Number((trimFrames / FPS).toFixed(5)) : 0;
+    if (trimSeconds > 0) {
+      const trimAudioId = b.addNode("H3AudioTrimStart", `Trim audio ${i + 1}`, [joinX - 320, 900 + (i - 1) * 80], {
+        size: [280, 80],
+        widgets_values: [trimSeconds],
+        widgets_values_named: { seconds: trimSeconds },
+        inputs: [
+          { name: "audio", type: "AUDIO", link: null },
+          { name: "seconds", type: "FLOAT", widget: { name: "seconds" }, link: null }
+        ],
+        outputs: [{ name: "AUDIO", type: "AUDIO", links: [] }],
+        properties: H3MS_PROPS("H3AudioTrimStart")
+      });
+      b.link(segmentAudioIds[i], 1, trimAudioId, 0, "AUDIO");
+      b.link(trimAudioId, 0, concatId, 1, "AUDIO");
+    } else {
+      b.link(segmentAudioIds[i], 1, concatId, 1, "AUDIO");
+    }
+    prevAudio = concatId;
+  }
+  const finalAudio = N > 1 ? prevAudio : segmentAudioIds[0];
+
+  let outputFps = FPS;
+  if (rifeMultiplier >= 2) {
+    const rifeId = b.addNode("RIFE VFI", "RIFE Final Video", [joinX + 200, 700], {
+      size: [320, 220],
+      widgets_values: ["rife47.pth", 10, rifeMultiplier, true, true, 1.0],
+      widgets_values_named: {
+        ckpt_name: "rife47.pth",
+        clear_cache_after_n_frames: 10,
+        multiplier: rifeMultiplier,
+        fast_mode: true,
+        ensemble: true,
+        scale_factor: 1.0
+      },
+      inputs: [
+        { name: "ckpt_name", type: "COMBO", widget: { name: "ckpt_name" }, link: null },
+        { name: "frames", type: "IMAGE", link: null },
+        { name: "clear_cache_after_n_frames", type: "INT", widget: { name: "clear_cache_after_n_frames" }, link: null },
+        { name: "multiplier", type: "INT", widget: { name: "multiplier" }, link: null },
+        { name: "fast_mode", type: "BOOLEAN", widget: { name: "fast_mode" }, link: null },
+        { name: "ensemble", type: "BOOLEAN", widget: { name: "ensemble" }, link: null },
+        { name: "scale_factor", type: "COMBO", widget: { name: "scale_factor" }, link: null }
+      ],
+      outputs: [{ name: "IMAGE", type: "IMAGE", links: [] }],
+      properties: RIFE_PROPS
+    });
+    b.link(finalImages, 0, rifeId, 1, "IMAGE");
+    finalImages = rifeId;
+    outputFps = FPS * rifeMultiplier;
+  }
+
+  const finalCreate = b.addNode("CreateVideo", "Create Final Long Video", [joinX + 400, 700], {
+    widgets_values: [outputFps, 8],
+    widgets_values_named: { fps: outputFps, bit_depth: 8 },
+    inputs: [
+      { name: "images", type: "IMAGE", link: null },
+      { name: "audio", shape: 7, type: "AUDIO", link: null },
+      { name: "fps", type: "FLOAT", widget: { name: "fps" }, link: null },
+      { name: "bit_depth", shape: 7, type: "INT", widget: { name: "bit_depth" }, link: null }
+    ],
+    outputs: [{ name: "VIDEO", type: "VIDEO", links: [] }]
+  });
+  b.link(finalImages, 0, finalCreate, 0, "IMAGE");
+  b.link(finalAudio, N > 1 ? 0 : 1, finalCreate, 1, "AUDIO");
+  if (rifeMultiplier < 2) {
+    // When RIFE is off, keep V3's wired fps from the first segment (24).
+    b.link(segmentAudioIds[0], 2, finalCreate, 2, "FLOAT");
+  }
+  b.link(segmentAudioIds[0], 3, finalCreate, 3, "INT");
+
+  const finalSave = b.addNode("SaveVideo", "Save Final Long Video", [joinX + 400, 900], {
+    size: [500, 300],
+    widgets_values: ["video/MiniMax_H3_Long", "auto", "auto"],
+    widgets_values_named: { filename_prefix: "video/MiniMax_H3_Long", format: "auto", codec: "auto" },
+    inputs: [{ name: "video", type: "VIDEO", link: null }],
+    outputs: [
+      { name: "video_url", type: "VIDEO", links: null },
+      { name: "video", type: "VIDEO", links: null }
+    ],
+    properties: { cnr_id: "comfy-core", ver: "0.30.1", "Node name for S&R": "SaveVideo" }
+  });
+  b.link(finalCreate, 0, finalSave, 0, "VIDEO");
+
+  b.nodes.forEach((n, i) => n.order = i);
+
+  return {
+    id: `minimax-long-dynamic-${N}x-${isT2V ? "t2v" : "i2v"}-v3av1`,
+    revision: 0,
+    last_node_id: b.nextId - 1,
+    last_link_id: b.nextLink - 1,
+    nodes: b.nodes,
+    links: b.links,
+    groups: [],
+    config: {},
+    extra: { ds: { scale: 0.6, offset: [0, 0] }, frontendVersion: "1.49.6", v3av1: {
+      lastFrameContinue, overlapFrames, colorMatch: colorMatchOn, rifeMultiplier, outputFps
+    } },
+    version: 0.4
+  };
+}
+
+// ------------------------------------------------------------------
+// UI actions
+// ------------------------------------------------------------------
+function showStatus(msg, type = "info") {
+  const el = $("status");
+  el.textContent = msg;
+  el.className = "status " + type;
+}
+
+$("btnPlan").addEventListener("click", async () => {
+  const prompt = $("userPrompt").value.trim();
+  const duration = parseFloat($("duration").value) || 60;
+  const segLen = parseFloat($("segLen").value) || 4;
+  const provider = $("provider").value;
+
+  if (!prompt) return showStatus("Enter a prompt first", "error");
+
+  // Local generator path (no API)
+  if (provider === "none") {
+    showStatus("Generating local continuity-aware segments…", "info");
+    try {
+      const plan = generateLocalSegments(prompt, duration, segLen, $("genMode").value);
+      $("segmentsJson").value = JSON.stringify(plan, null, 2);
+      showStatus(`Created ${plan.segments.length} segments (~${segLen}s each) with strong continuity language for seamless joins`, "success");
+    } catch (e) {
+      showStatus("Local generation error: " + e.message, "error");
+    }
+    return;
+  }
+
+  // LLM path
+  $("btnPlan").disabled = true;
+  showStatus("Calling LLM…", "info");
+
+  try {
+    let text = await callLLM(prompt, duration);
+    text = text.trim();
+    if (text.startsWith("```")) {
+      text = text.replace(/^```(?:json)?\\n?/, "").replace(/\\n?```$/, "");
+    }
+    const plan = JSON.parse(text);
+    if (!plan.segments) throw new Error("Response missing segments");
+    $("segmentsJson").value = JSON.stringify(plan, null, 2);
+    showStatus(`Received ${plan.segments.length} segments (target ~${segLen}s each) – continuity language included`, "success");
+  } catch (e) {
+    showStatus("Error: " + e.message, "error");
+  } finally {
+    $("btnPlan").disabled = false;
+  }
+});
+
+$("btnGenerate").addEventListener("click", () => {
+  let plan;
+  try {
+    plan = JSON.parse($("segmentsJson").value);
+  } catch (e) {
+    return showStatus("Invalid JSON in segments editor", "error");
+  }
+  if (!plan.segments || !plan.segments.length) {
+    return showStatus("No segments found", "error");
+  }
+
+  const mode = $("genMode").value;
+  if (mode === "i2v" && !$("startImage").value.trim()) {
+    return showStatus("Start image filename is required in I2V mode", "error");
+  }
+
+  const config = {
+    mode,
+    width: parseInt($("width").value) || 768,
+    height: parseInt($("height").value) || 1344,
+    steps: parseInt($("steps").value) || 8,
+    startImage: $("startImage").value || "start_frame.png",
+    unetName: comfyModelName($("unetName").value),
+    clipName: comfyModelName($("clipName").value),
+    videoVae: comfyModelName($("videoVae").value),
+    audioVae: comfyModelName($("audioVae").value),
+    baseSeed: 144012845932748,
+    targetSegmentSeconds: parseFloat($("segLen").value) || 4,
+    lastFrameContinue: $("lastFrameContinue").value !== "off",
+    overlapFrames: parseInt($("overlapFrames").value, 10) || 0,
+    fadeInterpolation: $("fadeInterpolation").value || "ease_in_out",
+    colorMatch: $("colorMatch").value !== "off",
+    colorMatchMethod: $("colorMatchMethod").value || "mkl",
+    colorMatchStrength: parseFloat($("colorMatchStrength").value) || 0,
+    rifeMultiplier: parseInt($("rifeMultiplier").value, 10) || 0
+  };
+
+  showStatus("Building workflow…", "info");
+  const doc = buildWorkflow(plan.segments, config);
+  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `minimax_long_${plan.segments.length}x_${mode}.json`;
+  a.click();
+  showStatus(`Downloaded workflow (${doc.last_node_id} nodes, ${doc.last_link_id} links) – ${mode.toUpperCase()} • V3aV1 seam smoothing ready. Load the JSON in ComfyUI; Manager can install any missing packs from the node cnr_id.`, "success");
+});
+
+$("btnDownloadSeg").addEventListener("click", () => {
+  try {
+    const plan = JSON.parse($("segmentsJson").value);
+    const blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "segments.json";
+    a.click();
+  } catch (e) {
+    showStatus("Invalid segments JSON", "error");
+  }
+});
+
+$("btnGrokModels").addEventListener("click", async () => {
+  const key = $("apiKey").value.trim();
+  if (!key) return showStatus("Enter an xAI API key to refresh Grok models", "error");
+  showStatus("Loading Grok models…", "info");
+  try {
+    const ids = (await listOpenAIModels("https://api.x.ai/v1", key)).filter(isGrokChatModel);
+    const merged = ids.slice();
+    GROK_MODELS.forEach(id => { if (!merged.includes(id)) merged.push(id); });
+    if (!merged.length) throw new Error("No Grok chat models in the response");
+    setGrokOptions(merged);
+    saveSettings();
+    showStatus(`Loaded ${ids.length} Grok chat model${ids.length === 1 ? "" : "s"} from xAI`, "success");
+  } catch (e) {
+    showStatus("Grok model list failed: " + e.message, "error");
+  }
+});
+
+$("btnLmModels").addEventListener("click", async () => {
+  showStatus("Loading LM Studio models…", "info");
+  try {
+    $("lmstudioUrl").value = openAIBase($("lmstudioUrl").value);
+    const ids = await listOpenAIModels($("lmstudioUrl").value, $("apiKey").value.trim());
+    fillModelSelect($("lmstudioModelSelect"), ids, $("lmstudioModel").value.trim());
+    if (!$("lmstudioModel").value.trim()) $("lmstudioModel").value = ids[0];
+    $("lmstudioModelSelect").value = $("lmstudioModel").value.trim();
+    saveSettings();
+    showStatus(`Loaded ${ids.length} LM Studio model${ids.length === 1 ? "" : "s"}`, "success");
+  } catch (e) {
+    showStatus("LM Studio model list failed: " + e.message, "error");
+  }
+});
+
+$("btnCustomModels").addEventListener("click", async () => {
+  showStatus("Loading models…", "info");
+  try {
+    $("customUrl").value = openAIBase($("customUrl").value);
+    const ids = await listOpenAIModels($("customUrl").value, $("apiKey").value.trim());
+    fillModelSelect($("customModelSelect"), ids, $("customModel").value.trim());
+    if (!$("customModel").value.trim()) $("customModel").value = ids[0];
+    $("customModelSelect").value = $("customModel").value.trim();
+    saveSettings();
+    showStatus(`Loaded ${ids.length} model${ids.length === 1 ? "" : "s"}`, "success");
+  } catch (e) {
+    showStatus("Model list failed: " + e.message, "error");
+  }
+});
+
+loadSettings();
+</script>
+<script>
+/* ComfyUI API-format export (added for LM Studio / /prompt use) */
+(function(){
+  const SKIP = new Set(["Note","MarkdownNote","PrimitiveNode","Reroute"]);
+  const UI_ONLY = new Set(["control_after_generate","control_before_generate","upload","fixed","randomize"]);
+  const KNOWN = {"UNETLoader":["unet_name","weight_dtype"],"CLIPLoader":["clip_name","type","device"],"VAELoader":["vae_name"],"LatentUpscaleModelLoader":["model_name"],"KSamplerSelect":["sampler_name"],"ManualSigmas":["sigmas"],"RandomNoise":["noise_seed","control_after_generate"],"CLIPTextEncode":["text"],"LTXVConditioning":["frame_rate"],"EmptyLTXVLatentVideo":["width","height","length","batch_size"],"LTXVEmptyLatentAudio":["frames_number","frame_rate","batch_size"],"LTXVDualCFGGuider":["video_cfg","audio_cfg"],"VAEDecodeTiled":["tile_size","overlap","temporal_size","temporal_overlap"],"CreateVideo":["fps","bit_depth"],"ImageFromBatch":["batch_index","length"],"SaveVideo":["filename_prefix","format","codec"],"LTXVImgToVideoInplace":["strength","bypass"],"LTXVAddGuide":["frame_idx","strength"],"AudioConcat":["direction"],"LoadImage":["image","upload"],"EasyCache":["reuse_threshold","start_percent","end_percent","verbose"],"PathchSageAttentionKJ":["sage_attention","allow_compile"],"PrimitiveInt":["value","fixed"],"MiniMaxH3ImageToVideo":["prompt","width","height","length"],"BasicScheduler":["scheduler","steps","denoise"],"PrimitiveFloat":["value"],"PrimitiveBoolean":["value"],"PrimitiveStringMultiline":["value"],"LoraLoaderModelOnly":["lora_name","strength_model"],"ColorMatch":["method","strength","multithread"],"ImageBatchJoinWithTransition":["start_index","interpolation","transition_type","transitioning_frames","blur_radius","reverse","device"],"H3AudioTrimStart":["seconds"],"RIFE VFI":["ckpt_name","clear_cache_after_n_frames","multiplier","fast_mode","ensemble","scale_factor"]};
+  const PROMPT_KEYS = ["prompt","text","script","value","positive","prompts"];
+  function linkMap(links){ const m={}; (links||[]).forEach(l=>{ if(Array.isArray(l)) m[l[0]]={o:l[1],os:l[2],t:l[3],ts:l[4]}; else if(l) m[l.id]={o:l.origin_id,os:l.origin_slot,t:l.target_id,ts:l.target_slot}; }); return m; }
+  function toApi(wf, opts){
+    opts = opts||{};
+    const subs = {}; (((wf.definitions||{}).subgraphs)||[]).forEach(s=>subs[s.id]=s);
+    const out = {}; const promptNodes = [];
+    // ctx: {nodes, links(map), prefix, parent:{instance, ctx}}
+    function nodeById(ctx,id){ return ctx.byId[id]; }
+    // resolve the source feeding (ctx, link id) -> [apiId, slot] | {value} | null
+    function resolveLink(ctx, linkId, depth){
+      if (linkId==null || depth>64) return null;
+      const l = ctx.links[linkId]; if(!l) return null;
+      return resolveOutput(ctx, l.o, l.os, depth+1);
+    }
+    function resolveOutput(ctx, nodeId, slot, depth){
+      if (depth>64) return null;
+      if (nodeId === -10) { // subgraph input
+        const p = ctx.parent; if(!p) return null;
+        const inst = p.inst; const sg = ctx.sg; const inpDef = (sg.inputs||[])[slot];
+        const instIn = (inst.inputs||[]).find(i=>inpDef && i.name===inpDef.name);
+        if (instIn && instIn.link!=null) return resolveLink(p.ctx, instIn.link, depth+1);
+        const named = inst.widgets_values_named||{};
+        if (inpDef && Object.prototype.hasOwnProperty.call(named, inpDef.name)) return {value: named[inpDef.name]};
+        return null;
+      }
+      const n = nodeById(ctx,nodeId); if(!n) return null;
+      if (subs[n.type]) { // subgraph instance output
+        const inner = ctxFor(subs[n.type], n, ctx);
+        const l = Object.values(inner.links).find(x=>x.t===-20 && x.ts===slot);
+        return l ? resolveOutput(inner, l.o, l.os, depth+1) : null;
+      }
+      if (n.type==="Reroute" || n.mode===4) { // pass-through
+        const outType = ((n.outputs||[])[slot]||{}).type;
+        const ins = (n.inputs||[]).filter(i=>i.link!=null);
+        const pick = ins.find(i=>i.type===outType) || (n.type==="Reroute"?ins[0]:null);
+        return pick ? resolveLink(ctx, pick.link, depth+1) : null;
+      }
+      if (n.mode===2 || SKIP.has(n.type)) return null;
+      return [ctx.prefix + n.id, slot];
+    }
+    const ctxCache = new Map();
+    function ctxFor(sg, inst, parentCtx){
+      const key = parentCtx.prefix + inst.id;
+      if (ctxCache.has(key)) return ctxCache.get(key);
+      const c = { sg, nodes: sg.nodes||[], byId:{}, links: linkMap(sg.links), prefix: key+":", parent:{inst, ctx:parentCtx} };
+      c.nodes.forEach(n=>c.byId[n.id]=n); ctxCache.set(key,c); walk(c); return c;
+    }
+    function walk(ctx){
+      ctx.nodes.forEach(n=>{
+        if (subs[n.type]) { if (n.mode!==2 && n.mode!==4) ctxFor(subs[n.type], n, ctx); return; }
+        if (SKIP.has(n.type) || n.mode===2 || n.mode===4) return;
+        const inputs = {};
+        const named = n.widgets_values_named || {};
+        Object.keys(named).forEach(k=>{ if(!UI_ONLY.has(k)) inputs[k]=named[k]; });
+        if (!n.widgets_values_named && Array.isArray(n.widgets_values) && KNOWN[n.type]) {
+          KNOWN[n.type].forEach((k,i)=>{ if(i<n.widgets_values.length && !UI_ONLY.has(k)) inputs[k]=n.widgets_values[i]; });
+        } else if (!n.widgets_values_named && Array.isArray(n.widgets_values) && opts.objectInfo && opts.objectInfo[n.type]) {
+          const req = Object.assign({}, (opts.objectInfo[n.type].input||{}).required, (opts.objectInfo[n.type].input||{}).optional);
+          let i=0; Object.keys(req).forEach(k=>{ const t=req[k][0]; if(typeof t==="string" && /^[A-Z_]+$/.test(t) && !["INT","FLOAT","STRING","BOOLEAN","COMBO"].includes(t)) return; if(i<n.widgets_values.length){ inputs[k]=n.widgets_values[i++]; const c=(req[k][1]||{}); if((t==="INT"||t==="FLOAT") && (c.control_after_generate || k==="seed"||k==="noise_seed")) i++; } });
+        }
+        (n.inputs||[]).forEach(inp=>{
+          if (inp.link==null) return;
+          const src = resolveLink(ctx, inp.link, 0);
+          const name = (inp.widget && inp.widget.name) || inp.name;
+          if (Array.isArray(src)) inputs[name]=src; else if (src && "value" in src) inputs[name]=src.value;
+        });
+        const id = ctx.prefix + n.id;
+        out[id] = { class_type: n.type, inputs, _meta: { title: n.title || n.type } };
+        if (/prompt|script|text/i.test(n.title||"") || /PrimitiveString|CLIPTextEncode|ScriptSplit|Multishot|ImageToVideo/i.test(n.type)) promptNodes.push(id);
+      });
+    }
+    const root = { nodes: wf.nodes||[], byId:{}, links: linkMap(wf.links), prefix:"", parent:null };
+    root.nodes.forEach(n=>root.byId[n.id]=n); walk(root);
+    // drop dangling references to removed nodes
+    Object.values(out).forEach(o=>Object.keys(o.inputs).forEach(k=>{ const v=o.inputs[k]; if(Array.isArray(v)&&v.length===2&&typeof v[0]==="string"&&!out[v[0]]) delete o.inputs[k]; }));
+    if (opts.placeholder) {
+      let done=false;
+      for (const id of promptNodes) { const o=out[id]; for (const k of PROMPT_KEYS) { if (typeof o.inputs[k]==="string" && !/negative/i.test(o._meta.title) && o.inputs[k].trim()) { o.inputs[k]="{{PROMPT}}"; done=true; break; } } if(done) break; }
+      if(!done){ for (const o of Object.values(out)) { for (const k of PROMPT_KEYS) if (typeof o.inputs[k]==="string" && o.inputs[k].length>20 && !/negative/i.test(o._meta.title)) { o.inputs[k]="{{PROMPT}}"; done=true; break; } if(done) break; } }
+    }
+    return out;
+  }
+  window.comfyUiToApi = toApi;
+  // Hook: capture the next workflow JSON download and re-save it in API format.
+  let pending = null; const blobs = new Map();
+  const origCreate = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = function(o){ const u=origCreate(o); if (o instanceof Blob) { blobs.set(u,o); if (blobs.size>20) blobs.delete(blobs.keys().next().value); } return u; };
+  const origClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function(){
+    if (pending && this.href && this.href.startsWith("blob:") && /\.json$/i.test(this.download||"")) {
+      const mode = pending; pending = null; const a=this; const name=a.download.replace(/\.json$/i, mode==="ph"?"_api_PROMPT.json":"_api.json");
+      (blobs.get(a.href) ? blobs.get(a.href).text() : fetch(a.href).then(r=>r.text())).then(t=>JSON.parse(t)).then(wf=>{
+        const api = toApi(wf, {placeholder: mode==="ph"});
+        const b = document.createElement("a"); b.href = URL.createObjectURL(new Blob([JSON.stringify(api,null,2)],{type:"application/json"})); b.download = name; origClick.call(b);
+      }).catch(e=>alert("API export failed: "+e.message));
+      return;
+    }
+    return origClick.call(this);
+  };
+  function addButtons(){
+    const g = document.getElementById("btnGenerate"); if(!g || document.getElementById("btnApiExport")) return;
+    const mk=(id,label,mode,tip)=>{ const b=document.createElement("button"); b.id=id; b.type="button"; b.className=g.className||"secondary"; if(!b.className) b.className="secondary"; b.textContent=label; b.title=tip; b.onclick=()=>{ pending=mode; g.click(); setTimeout(()=>{pending=null;},3000); }; return b; };
+    const b1=mk("btnApiExport","Download API JSON","api","ComfyUI API format (for /prompt, scripts, LM Studio)");
+    const b2=mk("btnApiExportPh","Download API JSON ({{PROMPT}})","ph","API format with the main prompt replaced by {{PROMPT}} – drop into C:\\Users\\Daddy\\comfy-mcp\\workflows");
+    g.after(b1); b1.after(b2); g.after(document.createTextNode(" ")); b1.after(document.createTextNode(" "));
+  }
+  if (document.readyState==="loading") document.addEventListener("DOMContentLoaded", addButtons); else addButtons();
+})();
+</script>
+<script>
+// Clear VRAM: ComfyUI's official /free endpoint (unloads models, frees memory)
+(function(){
+  const btn = document.getElementById("btnClearVram"); if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const base = ((document.getElementById("comfyUrl") || {}).value || "http://127.0.0.1:8188").trim().replace(/\/+$/, "");
+    btn.disabled = true; const old = btn.textContent; btn.textContent = "Clearing...";
+    try {
+      const res = await fetch(base + "/free", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }) });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      showStatus("VRAM cleared: ComfyUI at " + base + " unloaded its models.", "success");
+    } catch (e) {
+      showStatus("Could not reach ComfyUI at " + base + ". Check the URL (Advanced model names > ComfyUI URL, e.g. http://192.168.1.166:8188 for Bro) and that ComfyUI is running. If the browser blocks it, start ComfyUI with --enable-cors-header or use its own Manager > Unload Models. (" + (e.message || e) + ")", "error");
+    } finally { setTimeout(() => { btn.disabled = false; btn.textContent = old; }, 1500); }
+  });
+})();
+</script>
+</body>
+</html>
