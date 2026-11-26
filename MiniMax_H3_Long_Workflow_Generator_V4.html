@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MiniMax H3 Long Workflow Generator V4</title>
+<style>
+  body { font: 15px/1.45 system-ui, sans-serif; margin: 24px; max-width: 980px; color: #1b1b1b; background: #f6f4ef; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  p.lead, .hint { color: #444; }
+  label { display: block; font-weight: 600; margin-top: 12px; }
+  input, select, textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; }
+  textarea { min-height: 88px; }
+  .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .panel { background: #fff; border: 1px solid #ddd; padding: 12px 14px; margin-top: 14px; }
+  .shot { border: 1px solid #ccc; background: #fff; padding: 10px 12px; margin-top: 10px; }
+  .shot h3 { margin: 0 0 6px; font-size: 0.95rem; }
+  button { margin: 14px 8px 0 0; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .warn { background: #fff6d8; border: 1px solid #e0c36a; padding: 10px 12px; }
+  .checks label { font-weight: 500; margin-right: 16px; display: inline-block; }
+  .checks input { width: auto; }
+  code { font-size: 0.92em; }
+  #status.error { color: #8a1f1f; }
+  #status.ok { color: #1d5c32; }
+</style>
+</head>
+<body>
+<h1>MiniMax H3 Long Workflow Generator V4</h1>
+<p class="lead">One sampler, one trajectory. Later shots continue from the previous shot's tail latents. Picture and sound are joined inside the node. Do not use motion handoff across a location or time change. Use Scene cut for that.</p>
+<div class="warn">This laptop has 16 GB of VRAM. Default canvas is 864x480. 1280x736 is legal (720 is not). One shot at that size already hung the machine. Do not queue a second H3 job beside this one.</div>
+
+<label>Story or pasted scene blocks</label>
+<textarea id="idea" placeholder="One continuous action, or paste blocks separated by a line that is only ---"></textarea>
+
+<div class="row">
+  <div><label>Shots</label><input id="shots" type="number" min="1" max="8" value="4"></div>
+  <div><label>Seconds each</label><input id="seconds" type="number" min="2" max="15" step="0.5" value="6"></div>
+  <div><label>Width</label><input id="width" type="number" min="32" max="1536" step="32" value="864"></div>
+  <div><label>Height</label><input id="height" type="number" min="32" max="1536" step="32" value="480"></div>
+</div>
+<div class="row">
+  <div><label>Steps</label><input id="steps" type="number" min="4" max="30" value="20"></div>
+  <div><label>Seed</label><input id="seed" type="number" min="0" value="73001"></div>
+  <div>
+    <label>Join</label>
+    <select id="join">
+      <option value="latent_handoff" selected>Motion handoff (same scene)</option>
+      <option value="cut">Scene cut (place or time changes)</option>
+    </select>
+  </div>
+  <div>
+    <label>Preset</label>
+    <select id="preset">
+      <option value="864x480" selected>864 x 480</option>
+      <option value="1280x736">1280 x 736</option>
+    </select>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Prompt enhancement (optional)</h2>
+  <p class="hint">Off by default. Local rewrite needs no network. Grok needs the internet and an xAI key. LM Studio is the offline path: this PC at http://127.0.0.1:1234/v1, or another PC on the LAN at http://that-pc-ip:1234/v1. On that PC, start the server, serve on the local network, enable CORS, and load a model.</p>
+  <label>Provider</label>
+  <select id="provider">
+    <option value="none" selected>None — local rewrite only</option>
+    <option value="lmstudio">LM Studio (this PC or LAN, no internet)</option>
+    <option value="xai">Grok (xAI, needs internet)</option>
+    <option value="ollama">Ollama (this PC or LAN)</option>
+    <option value="custom">Custom OpenAI-compatible host</option>
+    <option value="openai">OpenAI (needs internet)</option>
+  </select>
+  <div id="apiKeyGroup" style="display:none">
+    <label>API key (stored only in this browser)</label>
+    <input type="password" id="apiKey" placeholder="xai-... or sk-..." autocomplete="off">
+  </div>
+  <div id="grokModelGroup" style="display:none">
+    <label>Grok model</label>
+    <select id="grokModel">
+      <option value="grok-4.7" selected>grok-4.7</option>
+      <option value="grok-4">grok-4</option>
+      <option value="custom">Custom model id</option>
+    </select>
+    <label>Custom Grok id</label>
+    <input id="grokCustom" placeholder="only if Custom is selected">
+    <button type="button" id="btnGrokModels">Refresh Grok models</button>
+  </div>
+  <div id="lmstudioGroup" style="display:none">
+    <label>LM Studio base URL</label>
+    <input id="lmstudioUrl" value="http://127.0.0.1:1234/v1" placeholder="http://192.168.1.20:1234/v1">
+    <label>Listed models</label>
+    <select id="lmstudioModelSelect"><option value="">Type an id below</option></select>
+    <label>Model id</label>
+    <input id="lmstudioModel" placeholder="model id shown in LM Studio">
+    <button type="button" id="btnLmModels">List LM Studio models</button>
+  </div>
+  <div id="ollamaGroup" style="display:none">
+    <label>Ollama base URL</label>
+    <input id="ollamaUrl" value="http://127.0.0.1:11434" placeholder="http://192.168.1.20:11434">
+    <label>Ollama model</label>
+    <input id="ollamaModel" value="qwen2.5:32b">
+  </div>
+  <div id="customGroup" style="display:none">
+    <label>Base URL (include /v1)</label>
+    <input id="customUrl" value="http://127.0.0.1:8080/v1">
+    <label>Model id</label>
+    <input id="customModel" placeholder="model id">
+    <button type="button" id="btnCustomModels">List models</button>
+  </div>
+  <div id="openaiGroup" style="display:none">
+    <label>OpenAI model</label>
+    <input id="openaiModel" value="gpt-4o">
+  </div>
+</div>
+
+<details class="panel">
+  <summary><strong>Graph options (off unless checked)</strong></summary>
+  <div class="checks">
+    <label><input type="checkbox" id="optTurbo"> Turbo LoRA. Lower Steps to 8 if you turn this on.</label>
+    <label><input type="checkbox" id="optSage"> SageAttention</label>
+    <label><input type="checkbox" id="optCache"> EasyCache</label>
+    <label><input type="checkbox" id="optStart"> Identity still (not a first frame)</label>
+  </div>
+  <label>Start image filename in ComfyUI input/</label>
+  <input id="startImage" placeholder="mayor.png" disabled>
+  <label>UNET</label>
+  <input id="unetName" value="minimax_h3_fl2va_pruned_int8_convrot.safetensors">
+  <label>CLIP</label>
+  <input id="clipName" value="qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors">
+  <label>Video VAE</label>
+  <input id="videoVae" value="minimax_h3_video_vae_fp16.safetensors">
+  <label>Audio VAE</label>
+  <input id="audioVae" value="minimax_h3_audio_vae_fp32.safetensors">
+  <label>Turbo LoRA</label>
+  <input id="loraName" value="minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors">
+  <label>ComfyUI URL (this machine)</label>
+  <input id="comfyUrl" value="http://127.0.0.1:8188">
+</details>
+
+<div id="shotBox"></div>
+<p>
+  <button id="btnShots" type="button">Build shot text locally</button>
+  <button id="btnEnhance" type="button">Enhance with selected provider</button>
+  <button id="btnJson" type="button">Download workflow JSON</button>
+  <button id="btnFree" type="button">Clear ComfyUI VRAM</button>
+</p>
+<p id="status"></p>
+<script src="v4_app.js"></script>
+</body>
+</html>

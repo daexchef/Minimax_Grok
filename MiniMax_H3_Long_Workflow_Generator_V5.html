@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MiniMax H3 Long Workflow Generator V5</title>
+<style>
+  body { font: 15px/1.45 system-ui, sans-serif; margin: 24px; max-width: 980px; color: #1b1b1b; background: #f6f4ef; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  p.lead, .hint { color: #444; }
+  label { display: block; font-weight: 600; margin-top: 12px; }
+  input, select, textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; }
+  textarea { min-height: 88px; }
+  .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .panel { background: #fff; border: 1px solid #ddd; padding: 12px 14px; margin-top: 14px; }
+  .shot { border: 1px solid #ccc; background: #fff; padding: 10px 12px; margin-top: 10px; }
+  .shot h3 { margin: 0 0 6px; font-size: 0.95rem; }
+  button { margin: 14px 8px 0 0; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .warn { background: #fff6d8; border: 1px solid #e0c36a; padding: 10px 12px; }
+  .checks label { font-weight: 500; margin-right: 16px; display: inline-block; }
+  .checks input { width: auto; }
+  code, pre { font-size: 0.86em; }
+  pre.guide { white-space: pre-wrap; max-height: 320px; overflow: auto; background: #f3f1ea; padding: 10px; }
+  #status.error { color: #8a1f1f; }
+  #status.ok { color: #1d5c32; }
+</style>
+</head>
+<body>
+<h1>MiniMax H3 Long Workflow Generator V5</h1>
+<p class="lead">Same latent-handoff graph as V4. Enhancement now has to follow the Full-Reference rewrite structure embedded in this page. The two LM Studio files you named are the same guide; this page uses that structure.</p>
+<div class="warn">This laptop has 16 GB of VRAM. Default canvas is 864x480. 1280x736 is legal (720 is not). One shot at that size already hung the machine. Do not queue a second H3 job beside this one.</div>
+
+<label>Story or pasted scene blocks</label>
+<textarea id="idea" placeholder="One continuous action, or paste blocks separated by a line that is only ---"></textarea>
+
+<div class="row">
+  <div><label>Shots</label><input id="shots" type="number" min="1" max="8" value="4"></div>
+  <div><label>Seconds each</label><input id="seconds" type="number" min="2" max="15" step="0.5" value="6"></div>
+  <div><label>Width</label><input id="width" type="number" min="32" max="1536" step="32" value="864"></div>
+  <div><label>Height</label><input id="height" type="number" min="32" max="1536" step="32" value="480"></div>
+</div>
+<div class="row">
+  <div><label>Steps</label><input id="steps" type="number" min="4" max="30" value="20"></div>
+  <div><label>Seed</label><input id="seed" type="number" min="0" value="73001"></div>
+  <div>
+    <label>Join</label>
+    <select id="join">
+      <option value="latent_handoff" selected>Motion handoff (same scene)</option>
+      <option value="cut">Scene cut (place or time changes)</option>
+    </select>
+  </div>
+  <div>
+    <label>Preset</label>
+    <select id="preset">
+      <option value="864x480" selected>864 x 480</option>
+      <option value="1280x736">1280 x 736</option>
+    </select>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Prompt enhancement (optional)</h2>
+  <p class="hint">Off by default. When a provider is selected, the system prompt is the structure in the panel below. The model must return the six sections. Each shot box then contains that full structure, with only that shot inside detailed_description. Grok needs the internet and an xAI key. LM Studio is the offline path: this PC at http://127.0.0.1:1234/v1, or a LAN host at http://that-pc-ip:1234/v1, with CORS enabled and a model loaded.</p>
+  <label>Provider</label>
+  <select id="provider">
+    <option value="none" selected>None — local rewrite only</option>
+    <option value="lmstudio">LM Studio (this PC or LAN, no internet)</option>
+    <option value="xai">Grok (xAI, needs internet)</option>
+    <option value="ollama">Ollama (this PC or LAN)</option>
+    <option value="custom">Custom OpenAI-compatible host</option>
+    <option value="openai">OpenAI (needs internet)</option>
+  </select>
+  <div id="apiKeyGroup" style="display:none">
+    <label>API key (stored only in this browser)</label>
+    <input type="password" id="apiKey" placeholder="xai-... or sk-..." autocomplete="off">
+  </div>
+  <div id="grokModelGroup" style="display:none">
+    <label>Grok model</label>
+    <select id="grokModel">
+      <option value="grok-4.7" selected>grok-4.7</option>
+      <option value="grok-4">grok-4</option>
+      <option value="custom">Custom model id</option>
+    </select>
+    <label>Custom Grok id</label>
+    <input id="grokCustom" placeholder="only if Custom is selected">
+    <button type="button" id="btnGrokModels">Refresh Grok models</button>
+  </div>
+  <div id="lmstudioGroup" style="display:none">
+    <label>LM Studio base URL</label>
+    <input id="lmstudioUrl" value="http://127.0.0.1:1234/v1" placeholder="http://192.168.1.20:1234/v1">
+    <label>Listed models</label>
+    <select id="lmstudioModelSelect"><option value="">Type an id below</option></select>
+    <label>Model id</label>
+    <input id="lmstudioModel" placeholder="model id shown in LM Studio">
+    <button type="button" id="btnLmModels">List LM Studio models</button>
+  </div>
+  <div id="ollamaGroup" style="display:none">
+    <label>Ollama base URL</label>
+    <input id="ollamaUrl" value="http://127.0.0.1:11434" placeholder="http://192.168.1.20:11434">
+    <label>Ollama model</label>
+    <input id="ollamaModel" value="qwen2.5:32b">
+  </div>
+  <div id="customGroup" style="display:none">
+    <label>Base URL (include /v1)</label>
+    <input id="customUrl" value="http://127.0.0.1:8080/v1">
+    <label>Model id</label>
+    <input id="customModel" placeholder="model id">
+    <button type="button" id="btnCustomModels">List models</button>
+  </div>
+  <div id="openaiGroup" style="display:none">
+    <label>OpenAI model</label>
+    <input id="openaiModel" value="gpt-4o">
+  </div>
+</div>
+
+<details class="panel">
+  <summary><strong>Embedded prompt structure (sent with every enhancement)</strong></summary>
+  <p class="hint">This is the required output of VIDEO_PROMPT_WRITING_GUIDE_ref_en. The .md and .md.txt copies are identical. Enhancement rejects a reply that skips these sections.</p>
+  <pre class="guide" id="refGuide"></pre>
+</details>
+
+<details class="panel">
+  <summary><strong>Graph options (off unless checked)</strong></summary>
+  <div class="checks">
+    <label><input type="checkbox" id="optTurbo"> Turbo LoRA. Lower Steps to 8 if you turn this on.</label>
+    <label><input type="checkbox" id="optSage"> SageAttention</label>
+    <label><input type="checkbox" id="optCache"> EasyCache</label>
+    <label><input type="checkbox" id="optStart"> Identity still (not a first frame)</label>
+  </div>
+  <label>Start image filename in ComfyUI input/</label>
+  <input id="startImage" placeholder="mayor.png" disabled>
+  <label>UNET</label>
+  <input id="unetName" value="minimax_h3_fl2va_pruned_int8_convrot.safetensors">
+  <label>CLIP</label>
+  <input id="clipName" value="qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors">
+  <label>Video VAE</label>
+  <input id="videoVae" value="minimax_h3_video_vae_fp16.safetensors">
+  <label>Audio VAE</label>
+  <input id="audioVae" value="minimax_h3_audio_vae_fp32.safetensors">
+  <label>Turbo LoRA</label>
+  <input id="loraName" value="minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors">
+  <label>ComfyUI URL (this machine)</label>
+  <input id="comfyUrl" value="http://127.0.0.1:8188">
+</details>
+
+<label>Full rewrite</label>
+<textarea id="fullRewrite" placeholder="The six-section rewrite appears here after enhancement."></textarea>
+<div id="shotBox"></div>
+<p>
+  <button id="btnShots" type="button">Build shot text locally</button>
+  <button id="btnEnhance" type="button">Enhance with selected provider</button>
+  <button id="btnJson" type="button">Download workflow JSON</button>
+  <button id="btnFree" type="button">Clear ComfyUI VRAM</button>
+</p>
+<p id="status"></p>
+<script>
+const REF_GUIDE = [
+"Full-Reference rewrite. Write every section in English. Keep the original language only for dialogue and lyrics inside <d> and for text visibly present in the scene.",
+"Output these six sections, in this order, and no others:",
+"subject_definitions",
+"summary",
+"retention_analysis",
+"detailed_description",
+"overall_soundscape",
+"non_diegetic_music",
+"",
+"subject_definitions: one line per referenced item. Labels are <Subject N> for a person, animal, object, place, wardrobe, or action that will appear; <Picture N> only when an image is a concrete frame or shot-plan anchor; <Video N> only for a whole source video being edited, continued, or used for temporal structure; <Audio N> only for a real audio asset or a referenced voice, score, or soundtrack. Do not invent Picture, Video, or Audio labels unless the user supplied that asset. An identity still is <Picture 1> and defines appearance. It is not permission to lock the first frame. A story with no files still needs <Subject N> lines for each person and the place, with the visible traits the story names.",
+"Once a label is assigned, it keeps that meaning in every section. Do not redefine it.",
+"",
+"summary: one English paragraph. It must start with a square-bracket task type, for example [reference generation]. Allowed types, joined with ' + ' and not repeated: keyframe completion, reference generation, video editing, video continuation, audio reuse, audio reference. Use only types the assets actually justify. Use the labels already defined. Do not add new labels here.",
+"",
+"retention_analysis: one line per label. Visible labels use fully_preserved, partially_preserved, attribute_transfer, or weak_reference. Audio labels use fully_copy, partially_copy, reference, or weak_reference. Form: <Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - the named traits are retained. Do not write speaker IDs in this section.",
+"",
+"detailed_description: the shot body, in playback order. One or two English sentences of visual style before [Shot 1]. [Shot 1] has no timestamp. Later shots start [Shot N] At MM:SS.mmm, then the action. Write camera movement as natural English in the shot, including type, amplitude, and speed when they matter. Give each real speaker a stable (S1), (S2), in the order they first speak. When a defined subject speaks, write <Subject N> (Sx). Dialogue and lyrics go only in <d>[Language] exact words</d>, ending with . or ? or ! before </d>. Do not repeat dialogue in the sound sections. Use <scenetrans> when speech crosses a cut, and <cutoff> when the video ends mid-word. At the first clear appearance of a subject, state the referenced traits, the position in frame, and the current action. Later shots reuse the label and do not redefine it. Describe composition, appearance, position, light, action, state change, camera, and the sound that is happening. Do not reduce a shot to a plot summary.",
+"",
+"overall_soundscape: ambience and physical sounds across the whole video. No dialogue.",
+"non_diegetic_music: audience-only score, with instrumentation, tempo, and dynamics, or N/A. Characters cannot hear this.",
+"",
+"Skeleton:",
+"subject_definitions:",
+"<Subject 1> is ...",
+"summary:",
+"[reference generation] ...",
+"retention_analysis:",
+"<Subject 1> (appears in [Shot 1]): fully_preserved - ...",
+"detailed_description:",
+"The target video uses ...",
+"[Shot 1] ...",
+"[Shot 2] At 00:06.000, ...",
+"overall_soundscape:",
+"...",
+"non_diegetic_music:",
+"N/A"
+].join("\n");
+
+const SECTION_KEYS = ["subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music"];
+const $ = id => document.getElementById(id);
+const SETTINGS_KEY = "h3long_generator_v5";
+$("refGuide").textContent = REF_GUIDE;
+
+function snapFrames(seconds) {
+  let n = Math.max(5, Math.round(Number(seconds) * 24));
+  while (n % 17 !== 5) n += 1;
+  return n;
+}
+function setStatus(msg, kind) {
+  const el = $("status");
+  el.className = kind || "";
+  el.textContent = msg;
+}
+function stamp(index, seconds) {
+  const ms = Math.round(index * Number(seconds) * 1000);
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const milli = ms % 1000;
+  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + "." + String(milli).padStart(3, "0");
+}
+function splitIdea(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  if (text.includes("\n---\n") || text.startsWith("---")) return text.split(/\n---\n/).map(s => s.trim()).filter(Boolean);
+  const numbered = text.split(/\n(?=\d+\.\s)/).map(s => s.trim()).filter(s => /^\d+\./.test(s));
+  return numbered.length > 1 ? numbered : null;
+}
+function stripLockLanguage(s) {
+  return String(s || "")
+    .replace(/Continue seamlessly from the supplied first frame\.[^\n]*/gi, "")
+    .replace(/For the target video, at 0\.00 seconds[\s\S]*?referenced\.\s*/gi, "")
+    .replace(/\b(3D CG,?\s*)?feature-cartoon,?\s*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+function joinRule() {
+  const seconds = $("seconds").value;
+  if ($("join").value === "cut") {
+    return "Join mode is cut. After [Shot 1], each later shot uses [Shot N] At " + stamp(1, seconds).replace(/\d/g, "T") + " with a real timestamp, and the sentence says the shot cuts to a different place or time. Do not morph one location into the next. End each shot on a settled pose.";
+  }
+  return "Join mode is latent_handoff, one continuous scene. Still use [Shot N] At MM:SS.mmm for later shots, but the sentence must continue the same people, place, light, and direction of motion. Do not write that the shot cuts. Do not write Picture 1, last-frame lock language, or 'no cut no fade'. Shot 1 is still moving at its last frame. Only the last shot may land.";
+}
+function plannerSystem() {
+  return REF_GUIDE + "\n\n" + joinRule() + "\nShot count is exact. Timestamps use the seconds_each value: shot 2 starts at that duration, shot 3 at twice that, and so on, formatted MM:SS.mmm.\nNo cartoon language unless the user asked for it.\nOutput ONLY JSON with these keys: subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, non_diegetic_music. No markdown fence.";
+}
+function fullDocument(doc) {
+  return SECTION_KEYS.map(key => key + ":\n" + String(doc[key] || "").trim()).join("\n\n");
+}
+function splitShots(detailed) {
+  const text = String(detailed || "").trim();
+  const at = text.search(/\[Shot \d+\]/i);
+  if (at < 0) return [];
+  const preamble = text.slice(0, at).trim();
+  return text.slice(at).split(/(?=\[Shot \d+\])/i).map(s => s.trim()).filter(s => /^\[Shot \d+\]/i.test(s)).map(shot => preamble ? preamble + "\n" + shot : shot);
+}
+function shotPrompt(doc, shotBody) {
+  const one = Object.assign({}, doc, { detailed_description: shotBody });
+  return fullDocument(one);
+}
+function stripFences(raw) {
+  return String(raw || "").trim().replace(/^```(?:json|text)?\s*/i, "").replace(/```$/i, "").trim();
+}
+function parseSections(text) {
+  const src = "\n" + stripFences(text).replace(/\r/g, "");
+  const positions = [];
+  SECTION_KEYS.forEach(key => {
+    const match = new RegExp("\\n" + key + "\\s*:", "i").exec(src);
+    if (match) positions.push({ key, at: match.index, head: match[0].length });
+  });
+  positions.sort((a, b) => a.at - b.at);
+  const doc = {};
+  positions.forEach((item, i) => {
+    const end = i + 1 < positions.length ? positions[i + 1].at : src.length;
+    doc[item.key] = src.slice(item.at + item.head, end).trim();
+  });
+  return doc;
+}
+function asDoc(raw) {
+  const text = stripFences(raw);
+  try {
+    const data = JSON.parse(text);
+    if (data && (data.detailed_description || data.subject_definitions)) {
+      const doc = {};
+      SECTION_KEYS.forEach(key => { doc[key] = String(data[key] == null ? "" : data[key]).trim(); });
+      return doc;
+    }
+  } catch (e) { /* fall through to headed text */ }
+  return parseSections(text);
+}
+function validateDoc(doc) {
+  const missing = SECTION_KEYS.filter(key => !doc[key]);
+  if (missing.length) throw new Error("Enhancement skipped required sections: " + missing.join(", "));
+  if (!/<Subject \d+>/.test(doc.subject_definitions)) throw new Error("subject_definitions has no <Subject N> label.");
+  if (!/^\s*\[/.test(doc.summary)) throw new Error("summary must start with a [task type] prefix.");
+  if (!/(fully_preserved|partially_preserved|attribute_transfer|weak_reference|fully_copy|partially_copy|\breference\b)/.test(doc.retention_analysis)) throw new Error("retention_analysis has no relationship marker.");
+  if (!/\[Shot 1\]/i.test(doc.detailed_description)) throw new Error("detailed_description has no [Shot 1].");
+  const shots = splitShots(doc.detailed_description);
+  if (!shots.length) throw new Error("detailed_description did not split into shots.");
+  return shots;
+}
+function applyDoc(doc) {
+  const shots = validateDoc(doc);
+  $("fullRewrite").value = fullDocument(doc);
+  $("shots").value = shots.length;
+  renderShots(shots.map(body => shotPrompt(doc, body)));
+  return shots.length;
+}
+function localDoc(blocks, mode, seconds) {
+  const n = blocks.length;
+  const subjects = blocks.map((block, i) => "<Subject " + (i + 1) + "> is the visible subject of shot " + (i + 1) + ": " + stripLockLanguage(block).slice(0, 240));
+  const appear = subjects.map((_, i) => "[Shot " + (i + 1) + "]").join(", ");
+  const lines = blocks.map((block, i) => {
+    const body = stripLockLanguage(block);
+    const head = i === 0 ? "[Shot 1] " : "[Shot " + (i + 1) + "] At " + stamp(i, seconds) + ", ";
+    const motion = mode === "cut"
+      ? (i === 0 ? "New scene. " : "the shot cuts to a different place or time. ")
+      : (i === 0 ? "" : "the same people, place, light, and direction of motion continue without a cut. ");
+    const tail = mode === "cut" ? " End on a settled pose." : (i === n - 1 ? " Let the action settle only in the final beat." : " Keep the action moving through the last frame.");
+    return head + motion + body + " The camera move is motivated and written in plain English." + tail;
+  });
+  return {
+    subject_definitions: subjects.join("\n"),
+    summary: "[reference generation] The target video follows the user story across " + n + " shots. " + appear + " share the traits named in subject_definitions.",
+    retention_analysis: subjects.map((line, i) => line.split(":")[0] + " (appears in [Shot " + (i + 1) + "]): fully_preserved - the traits named for this subject are retained.").join("\n"),
+    detailed_description: "The target video is a realistic live-action scene with natural light.\n" + lines.join("\n"),
+    overall_soundscape: "Ambience matches the place and continues across the video. Physical sounds follow visible motion and do not restart between shots.",
+    non_diegetic_music: "N/A"
+  };
+}
+function collectShots() {
+  return [...document.querySelectorAll("#shotBox textarea")].map(t => t.value.trim()).filter(Boolean);
+}
+function renderShots(texts) {
+  const box = $("shotBox");
+  box.innerHTML = "";
+  texts.forEach((text, i) => {
+    const card = document.createElement("div");
+    card.className = "shot";
+    card.innerHTML = "<h3>Shot " + (i + 1) + "</h3>";
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    card.appendChild(ta);
+    box.appendChild(card);
+  });
+}
+function openAIBase(raw) {
+  let root = String(raw || "").trim();
+  if (!root) throw new Error("Enter a base URL");
+  root = root.replace(/\/+$/, "").replace(/\/(chat\/completions|completions|models)$/i, "").replace(/\/+$/, "");
+  root = root.replace(/(\/v1)+$/i, "/v1");
+  if (!/\/v1$/i.test(root)) root += "/v1";
+  return root;
+}
+function corsHint(base, err) {
+  return "Could not reach " + base + ". If this page was opened from disk, enable CORS on that server. " + ((err && err.message) || "");
+}
+async function readApiJson(res, label) {
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+  const errMsg = data && data.error ? (data.error.message || data.error) : "";
+  if (!res.ok) throw new Error(label + " " + res.status + ": " + String(errMsg || text).slice(0, 300));
+  if (errMsg) throw new Error(label + ": " + errMsg);
+  return data || {};
+}
+async function callOpenAICompat(base, model, apiKey, userMsg) {
+  const root = openAIBase(base);
+  if (!model) throw new Error("Enter a model id");
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey) headers.Authorization = "Bearer " + apiKey;
+  let res;
+  try {
+    res = await fetch(root + "/chat/completions", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: plannerSystem() },
+          { role: "user", content: userMsg }
+        ],
+        temperature: 0.4
+      })
+    });
+  } catch (e) { throw new Error(corsHint(root, e)); }
+  const data = await readApiJson(res, root);
+  const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (!content) throw new Error("The provider returned no message");
+  return content;
+}
+async function listModels(base, apiKey) {
+  const root = openAIBase(base);
+  const headers = {};
+  if (apiKey) headers.Authorization = "Bearer " + apiKey;
+  let res;
+  try { res = await fetch(root + "/models", { headers }); }
+  catch (e) { throw new Error(corsHint(root, e)); }
+  const data = await readApiJson(res, root + "/models");
+  const ids = (data.data || []).map(m => m && m.id).filter(Boolean);
+  if (!ids.length) throw new Error("Reached " + root + "/models but the list was empty. Load a model, or type its id.");
+  return ids;
+}
+function fillSelect(selectEl, ids) {
+  const keep = selectEl.value;
+  selectEl.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "Type an id below";
+  selectEl.appendChild(blank);
+  ids.forEach(id => {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = id;
+    selectEl.appendChild(o);
+  });
+  if (keep && ids.includes(keep)) selectEl.value = keep;
+  else if (ids[0]) selectEl.value = ids[0];
+}
+async function enhanceShots() {
+  const provider = $("provider").value;
+  if (provider === "none") throw new Error("Choose LM Studio, Grok, or another provider. None only does the local rewrite.");
+  const n = Math.max(1, Math.min(8, Number($("shots").value) || 1));
+  const userMsg = "raw_user_prompt: " + $("idea").value.trim() + "\nshot_count: " + n + "\nseconds_each: " + $("seconds").value + "\njoin_mode: " + $("join").value + ($("optStart").checked && $("startImage").value.trim() ? "\nidentity_still: " + $("startImage").value.trim() + " (appearance reference only, not a locked first frame)" : "");
+  let content = "";
+  if (provider === "lmstudio") {
+    content = await callOpenAICompat($("lmstudioUrl").value, $("lmstudioModel").value.trim() || $("lmstudioModelSelect").value, "", userMsg);
+  } else if (provider === "xai") {
+    const key = $("apiKey").value.trim();
+    if (!key) throw new Error("Grok needs an xAI API key and an internet connection. Offline, switch the provider to LM Studio.");
+    const model = $("grokModel").value === "custom" ? $("grokCustom").value.trim() : $("grokModel").value;
+    content = await callOpenAICompat("https://api.x.ai/v1", model, key, userMsg);
+  } else if (provider === "openai") {
+    const key = $("apiKey").value.trim();
+    if (!key) throw new Error("OpenAI needs an API key and an internet connection. Offline, switch the provider to LM Studio.");
+    content = await callOpenAICompat("https://api.openai.com/v1", $("openaiModel").value.trim(), key, userMsg);
+  } else if (provider === "custom") {
+    content = await callOpenAICompat($("customUrl").value, $("customModel").value.trim(), $("apiKey").value.trim(), userMsg);
+  } else if (provider === "ollama") {
+    const root = $("ollamaUrl").value.replace(/\/$/, "");
+    let res;
+    try {
+      res = await fetch(root + "/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: $("ollamaModel").value.trim(),
+          messages: [{ role: "system", content: plannerSystem() }, { role: "user", content: userMsg }],
+          stream: false,
+          options: { temperature: 0.4 }
+        })
+      });
+    } catch (e) { throw new Error(corsHint(root, e)); }
+    if (!res.ok) throw new Error("Ollama " + res.status);
+    const data = await res.json();
+    content = (data.message && data.message.content) || "";
+  }
+  const count = applyDoc(asDoc(content));
+  if (count !== n) setStatus("Structure accepted, but the model returned " + count + " shots instead of " + n + ". Read them before downloading.", "error");
+  return count;
+}
+function showProvider() {
+  const p = $("provider").value;
+  $("apiKeyGroup").style.display = (p === "xai" || p === "openai" || p === "custom") ? "" : "none";
+  $("grokModelGroup").style.display = p === "xai" ? "" : "none";
+  $("lmstudioGroup").style.display = p === "lmstudio" ? "" : "none";
+  $("ollamaGroup").style.display = p === "ollama" ? "" : "none";
+  $("customGroup").style.display = p === "custom" ? "" : "none";
+  $("openaiGroup").style.display = p === "openai" ? "" : "none";
+  $("btnEnhance").disabled = p === "none";
+}
+function widgetNode(type, title, pos, named, inputs, outputs, size) {
+  return {
+    id: 0, type, title, pos, size: size || [340, 140], flags: {}, order: 0, mode: 0,
+    inputs, outputs,
+    properties: { cnr_id: type.indexOf("H3") === 0 ? "comfyui-h3-multishot" : "comfy-core", ver: "0.33.0", "Node name for S&R": type },
+    widgets_values: Object.values(named),
+    widgets_values_named: named
+  };
+}
+function buildWorkflow(shotTexts) {
+  const width = Number($("width").value);
+  const height = Number($("height").value);
+  const frames = snapFrames($("seconds").value);
+  const continuity = $("join").value;
+  const named = {
+    script: shotTexts.join("\n---\n"), shot_count: shotTexts.length, width, height, frames_per_shot: frames,
+    seed: Number($("seed").value) || 0, control_after_generate: "fixed",
+    steps: Number($("steps").value) || 20, seed_per_shot: false,
+    memory_frames: continuity === "latent_handoff" ? 1 : 0, anchor_frames: 1,
+    sampler_name: "res_multistep", scheduler: "simple", bank_pinned: 1,
+    chain_gain_control: "off", continuity, bank_clip_frames: 22, color_level: "off",
+    join_anchor_noise: 0.02, join_blend: false, handoff_release: 0.3, bank_ref_noise: 0.02,
+    end_anchor: false, join_fx: "off", audio_lock: true,
+    handoff_taper: continuity === "latent_handoff" ? 4 : 0, handoff_depth: "block",
+    self_anchor_voice: false, reference_image_size: "match", preview_first_shot: true,
+    output_scale: 1, save_every_shot: true, upscale_model_name: "(none)",
+    master_normalize: "luma+contrast", pin_frames: "22", pin_noise: 0.05, pin_renorm: true,
+    reference_subjects: "", low_ram_master: true, audio_pin_frames: 0
+  };
+  const samplerInputs = [
+    { name: "model", type: "MODEL", link: null },
+    { name: "clip", type: "CLIP", link: null },
+    { name: "video_vae", type: "VAE", link: null },
+    { name: "audio_vae", type: "VAE", link: null }
+  ];
+  if ($("optStart").checked && $("startImage").value.trim()) samplerInputs.push({ name: "start_image", type: "IMAGE", link: null });
+  const nodes = [
+    widgetNode("UNETLoader", "UNET", [40, 40], { unet_name: $("unetName").value.trim(), weight_dtype: "default" }, [
+      { name: "unet_name", type: "COMBO", widget: { name: "unet_name" }, link: null },
+      { name: "weight_dtype", type: "COMBO", widget: { name: "weight_dtype" }, link: null }
+    ], [{ name: "MODEL", type: "MODEL", links: [] }]),
+    widgetNode("CLIPLoader", "CLIP", [40, 220], { clip_name: $("clipName").value.trim(), type: "minimax", device: "default" }, [
+      { name: "clip_name", type: "COMBO", widget: { name: "clip_name" }, link: null },
+      { name: "type", type: "COMBO", widget: { name: "type" }, link: null },
+      { name: "device", type: "COMBO", widget: { name: "device" }, link: null }
+    ], [{ name: "CLIP", type: "CLIP", links: [] }]),
+    widgetNode("VAELoader", "Video VAE", [40, 420], { vae_name: $("videoVae").value.trim() }, [
+      { name: "vae_name", type: "COMBO", widget: { name: "vae_name" }, link: null }
+    ], [{ name: "VAE", type: "VAE", links: [] }]),
+    widgetNode("VAELoader", "Audio VAE", [40, 580], { vae_name: $("audioVae").value.trim() }, [
+      { name: "vae_name", type: "COMBO", widget: { name: "vae_name" }, link: null }
+    ], [{ name: "VAE", type: "VAE", links: [] }])
+  ];
+  let modelFrom = 1;
+  if ($("optTurbo").checked) {
+    nodes.push(widgetNode("LoraLoaderModelOnly", "Turbo LoRA", [420, 40], { lora_name: $("loraName").value.trim(), strength_model: 1 }, [
+      { name: "model", type: "MODEL", link: null },
+      { name: "lora_name", type: "COMBO", widget: { name: "lora_name" }, link: null },
+      { name: "strength_model", type: "FLOAT", widget: { name: "strength_model" }, link: null }
+    ], [{ name: "MODEL", type: "MODEL", links: [] }]));
+    modelFrom = nodes.length;
+  }
+  if ($("optSage").checked) {
+    nodes.push(widgetNode("PathchSageAttentionKJ", "SageAttention", [420, 220], { sage_attention: "auto" }, [
+      { name: "model", type: "MODEL", link: null },
+      { name: "sage_attention", type: "COMBO", widget: { name: "sage_attention" }, link: null }
+    ], [{ name: "MODEL", type: "MODEL", links: [] }]));
+    modelFrom = nodes.length;
+  }
+  if ($("optCache").checked) {
+    nodes.push(widgetNode("EasyCache", "EasyCache", [420, 400], { reuse_threshold: 0.2, start_percent: 0.15, end_percent: 0.95, verbose: false }, [
+      { name: "model", type: "MODEL", link: null },
+      { name: "reuse_threshold", type: "FLOAT", widget: { name: "reuse_threshold" }, link: null },
+      { name: "start_percent", type: "FLOAT", widget: { name: "start_percent" }, link: null },
+      { name: "end_percent", type: "FLOAT", widget: { name: "end_percent" }, link: null },
+      { name: "verbose", type: "BOOLEAN", widget: { name: "verbose" }, link: null }
+    ], [{ name: "MODEL", type: "MODEL", links: [] }]));
+    modelFrom = nodes.length;
+  }
+  nodes.push(widgetNode("H3MultishotMemorySampler", "Latent handoff sampler", [780, 40], named, samplerInputs, [
+    { name: "master_frames", type: "IMAGE", links: [] },
+    { name: "master_audio", type: "AUDIO", links: [] },
+    { name: "shots_rendered", type: "INT", links: null },
+    { name: "video_latents", type: "LATENT", links: null },
+    { name: "audio_latents", type: "LATENT", links: null },
+    { name: "head_frames", type: "INT", links: null },
+    { name: "master_path", type: "STRING", links: null }
+  ], [460, 980]));
+  const samplerId = nodes.length;
+  let startId = 0;
+  if ($("optStart").checked && $("startImage").value.trim()) {
+    nodes.push(widgetNode("LoadImage", "Identity still", [780, 1100], { image: $("startImage").value.trim() }, [
+      { name: "image", type: "COMBO", widget: { name: "image" }, link: null }
+    ], [{ name: "IMAGE", type: "IMAGE", links: [] }]));
+    startId = nodes.length;
+  }
+  nodes.push(widgetNode("CreateVideo", "Create master", [1320, 80], { fps: 24, bit_depth: 8 }, [
+    { name: "images", type: "IMAGE", link: null },
+    { name: "audio", type: "AUDIO", link: null },
+    { name: "fps", type: "FLOAT", widget: { name: "fps" }, link: null },
+    { name: "bit_depth", type: "INT", widget: { name: "bit_depth" }, link: null }
+  ], [{ name: "VIDEO", type: "VIDEO", links: [] }]));
+  const createId = nodes.length;
+  nodes.push(widgetNode("SaveVideo", "Save master", [1320, 320], { filename_prefix: "video/H3_Handoff", format: "auto", codec: "auto" }, [
+    { name: "video", type: "VIDEO", link: null }
+  ], [{ name: "video", type: "VIDEO", links: null }], [420, 200]));
+  const saveId = nodes.length;
+  nodes.forEach((n, i) => { n.id = i + 1; n.order = i; });
+  const links = [
+    [1, modelFrom, 0, samplerId, 0, "MODEL"],
+    [2, 2, 0, samplerId, 1, "CLIP"],
+    [3, 3, 0, samplerId, 2, "VAE"],
+    [4, 4, 0, samplerId, 3, "VAE"],
+    [5, samplerId, 0, createId, 0, "IMAGE"],
+    [6, samplerId, 1, createId, 1, "AUDIO"],
+    [7, createId, 0, saveId, 0, "VIDEO"]
+  ];
+  let nextLink = 8;
+  if ($("optTurbo").checked) links.push([nextLink++, 1, 0, 5, 0, "MODEL"]);
+  if ($("optSage").checked) {
+    const sageId = $("optTurbo").checked ? 6 : 5;
+    const from = $("optTurbo").checked ? 5 : 1;
+    links.push([nextLink++, from, 0, sageId, 0, "MODEL"]);
+  }
+  if ($("optCache").checked) {
+    let cacheId = 5;
+    let from = 1;
+    if ($("optTurbo").checked) { from = 5; cacheId = 6; }
+    if ($("optSage").checked) { from = cacheId; cacheId += 1; }
+    links.push([nextLink++, from, 0, cacheId, 0, "MODEL"]);
+  }
+  if (startId) links.push([nextLink++, startId, 0, samplerId, 4, "IMAGE"]);
+  links.forEach(link => {
+    const lid = link[0], from = link[1], fromSlot = link[2], to = link[3], toSlot = link[4];
+    const src = nodes[from - 1];
+    const dst = nodes[to - 1];
+    if (!src.outputs[fromSlot].links) src.outputs[fromSlot].links = [];
+    src.outputs[fromSlot].links.push(lid);
+    if (dst.inputs[toSlot]) dst.inputs[toSlot].link = lid;
+  });
+  return {
+    id: "minimax-h3-v5-ref-guide", revision: 0,
+    last_node_id: nodes.length, last_link_id: links.length,
+    nodes, links, groups: [], config: {},
+    extra: { notes: "V5. Enhancement follows the embedded Full-Reference six-section structure. latent_handoff continues the previous tail. cut is a real scene change." },
+    version: 0.4
+  };
+}
+function saveSettings() {
+  const fields = ["provider","apiKey","grokModel","grokCustom","lmstudioUrl","lmstudioModel","ollamaUrl","ollamaModel","customUrl","customModel","openaiModel","comfyUrl","unetName","clipName","videoVae","audioVae","loraName","startImage","join","preset"];
+  const data = {};
+  fields.forEach(id => { if ($(id)) data[id] = $(id).value; });
+  ["optTurbo","optSage","optCache","optStart"].forEach(id => { data[id] = $(id).checked; });
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+}
+function loadSettings() {
+  let data = {};
+  try { data = JSON.parse(localStorage.getItem(SETTINGS_KEY) || localStorage.getItem("h3long_generator_v4") || "{}"); } catch (e) { data = {}; }
+  Object.keys(data).forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    if (el.type === "checkbox") el.checked = !!data[id];
+    else if (data[id] != null) el.value = data[id];
+  });
+  $("startImage").disabled = !$("optStart").checked;
+  showProvider();
+}
+$("preset").addEventListener("change", () => {
+  const parts = $("preset").value.split("x").map(Number);
+  $("width").value = parts[0];
+  $("height").value = parts[1];
+  saveSettings();
+});
+$("provider").addEventListener("change", () => { showProvider(); saveSettings(); });
+$("optStart").addEventListener("change", () => { $("startImage").disabled = !$("optStart").checked; saveSettings(); });
+document.querySelectorAll("input, select").forEach(el => el.addEventListener("change", saveSettings));
+$("lmstudioModelSelect").addEventListener("change", () => {
+  if ($("lmstudioModelSelect").value) $("lmstudioModel").value = $("lmstudioModelSelect").value;
+  saveSettings();
+});
+$("btnShots").addEventListener("click", () => {
+  const n = Math.max(1, Math.min(8, Number($("shots").value) || 1));
+  const pasted = splitIdea($("idea").value);
+  const blocks = pasted && pasted.length ? pasted.slice(0, 8) : Array.from({ length: n }, () => $("idea").value.trim());
+  if (!blocks[0]) { setStatus("Paste a story first.", "error"); return; }
+  $("shots").value = blocks.length;
+  const count = applyDoc(localDoc(blocks, $("join").value, $("seconds").value));
+  setStatus("Local rewrite in the six-section structure. No API was called. " + count + " shots.", "ok");
+});
+$("btnEnhance").addEventListener("click", async () => {
+  $("btnEnhance").disabled = true;
+  setStatus("Asking " + $("provider").value + " for the six-section rewrite...", "");
+  try {
+    const count = await enhanceShots();
+    if (!$("status").className) setStatus("Enhanced " + count + " shots. Each shot box has all six sections. Read them before downloading.", "ok");
+  } catch (e) { setStatus(e.message || String(e), "error"); }
+  finally { showProvider(); }
+});
+$("btnLmModels").addEventListener("click", async () => {
+  try {
+    const ids = await listModels($("lmstudioUrl").value, "");
+    fillSelect($("lmstudioModelSelect"), ids);
+    if ($("lmstudioModelSelect").value) $("lmstudioModel").value = $("lmstudioModelSelect").value;
+    setStatus("Listed " + ids.length + " LM Studio model(s).", "ok");
+  } catch (e) { setStatus(e.message || String(e), "error"); }
+});
+$("btnGrokModels").addEventListener("click", async () => {
+  try {
+    const ids = (await listModels("https://api.x.ai/v1", $("apiKey").value.trim())).filter(id => /^grok-/.test(id));
+    const sel = $("grokModel");
+    const current = sel.value;
+    sel.innerHTML = "";
+    ids.forEach(id => {
+      const o = document.createElement("option");
+      o.value = id; o.textContent = id; sel.appendChild(o);
+    });
+    const custom = document.createElement("option");
+    custom.value = "custom"; custom.textContent = "Custom model id";
+    sel.appendChild(custom);
+    sel.value = ids.includes(current) ? current : (ids[0] || "custom");
+    setStatus("Listed " + ids.length + " Grok model(s).", "ok");
+  } catch (e) { setStatus(e.message || String(e), "error"); }
+});
+$("btnCustomModels").addEventListener("click", async () => {
+  try {
+    const ids = await listModels($("customUrl").value, $("apiKey").value.trim());
+    if (!$("customModel").value.trim()) $("customModel").value = ids[0];
+    setStatus("Listed " + ids.length + " model(s).", "ok");
+  } catch (e) { setStatus(e.message || String(e), "error"); }
+});
+$("btnFree").addEventListener("click", async () => {
+  const base = ($("comfyUrl").value || "http://127.0.0.1:8188").trim().replace(/\/+$/, "");
+  $("btnFree").disabled = true;
+  try {
+    const res = await fetch(base + "/free", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }) });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    setStatus("Unloaded models on " + base + ".", "ok");
+  } catch (e) {
+    setStatus("Browser blocked the call to " + base + ". ComfyUI is up, but it was started without CORS, so a page opened from disk cannot reach it. Restart with comfy launch, then try again. (" + (e.message || e) + ")", "error");
+  } finally { $("btnFree").disabled = false; }
+});
+$("btnJson").addEventListener("click", () => {
+  const width = Number($("width").value);
+  const height = Number($("height").value);
+  if (width % 32 || height % 32) { setStatus("Width and height must be multiples of 32. 720 is illegal; use 736 or 704.", "error"); return; }
+  let shots = collectShots();
+  if (!shots.length) { $("btnShots").click(); shots = collectShots(); }
+  if (!shots.length) { setStatus("Add a story or at least one shot.", "error"); return; }
+  const blob = new Blob([JSON.stringify(buildWorkflow(shots), null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "minimax_h3_v5_handoff.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus("Wrote " + shots.length + " structured shots, " + snapFrames($("seconds").value) + " frames each, " + width + "x" + height + ", " + $("join").value + ".", "ok");
+});
+loadSettings();
+</script>
+</body>
+</html>
